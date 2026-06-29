@@ -23,11 +23,30 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }, // required for Render-managed Postgres
 });
 
+async function ensureTablesExist() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_data (
+      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      data JSONB NOT NULL DEFAULT '{}',
+      updated_at TIMESTAMP DEFAULT NOW()
+    );
+  `);
+  console.log('Database tables verified/created successfully.');
+}
+
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 app.use(session({
-  store: new pgSession({ pool, tableName: 'session' }),
+  store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
@@ -169,6 +188,11 @@ app.get('/*splat', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Clarity Console running on port ${PORT}`);
+  try {
+    await ensureTablesExist();
+  } catch (err) {
+    console.error('Failed to set up database tables on startup:', err);
+  }
 });
