@@ -363,27 +363,6 @@ function showApp(){
   document.getElementById('sidebar-email').textContent = currentEmail;
   renderNav();
   renderTool();
-
-  // Save immediately when user leaves any input field (clicks away),
-  // without waiting for the 2-second debounce.
-  document.getElementById('app-shell').addEventListener('blur', (e) => {
-    if(e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA'){
-      clearTimeout(saveTimer);
-      saveTimer = null;
-      const statusEl = document.getElementById('save-status');
-      statusEl.textContent = 'Saving...';
-      apiFetch('/api/data', {
-        method:'PUT',
-        headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({data: currentData})
-      }).then(res => {
-        statusEl.textContent = res.ok ? 'Saved' : 'Could not save';
-        setTimeout(()=>{ if(statusEl.textContent!=='Saving...') statusEl.textContent=''; }, 1500);
-      }).catch(() => {
-        statusEl.textContent = 'Could not save (offline?)';
-      });
-    }
-  }, true); // capture phase so it fires before default blur behavior
 }
 
 // check if already logged in on page load
@@ -400,52 +379,61 @@ function showApp(){
 })();
 
 // ---------- SAVE (debounced) ----------
+let saveStatusEl = null;
+function getSaveStatus(){ return saveStatusEl || (saveStatusEl = document.getElementById('save-status')); }
+
 function scheduleSave(){
-  const statusEl = document.getElementById('save-status');
   clearTimeout(saveTimer);
   saveTimer = setTimeout(async ()=>{
-    statusEl.textContent = 'Saving...';
     try{
       const res = await apiFetch('/api/data', {
         method:'PUT',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({data: currentData})
       });
-      statusEl.textContent = res.ok ? 'Saved' : 'Could not save';
-      setTimeout(()=>{ if(statusEl.textContent!=='Saving...') statusEl.textContent=''; }, 1500);
+      const el = getSaveStatus();
+      if(el){ el.textContent = res.ok ? 'Saved' : 'Could not save'; }
+      setTimeout(()=>{
+        const el = getSaveStatus();
+        if(el && el.textContent !== 'Saving...') el.textContent = '';
+      }, 1500);
     }catch(e){
-      statusEl.textContent = 'Could not save (offline?)';
+      const el = getSaveStatus();
+      if(el) el.textContent = 'Could not save (offline?)';
     }
-  }, 2000); // 2 seconds after last keystroke — typing never hits the network
+  }, 2000);
 }
 
 function getToolData(tool, fallback){
   if(!currentData[tool]) currentData[tool] = JSON.parse(JSON.stringify(fallback));
   return currentData[tool];
 }
+let toolResultEl = null;
+function getToolResult(){ return toolResultEl || (toolResultEl = document.getElementById('tool-result')); }
+
+let resultOnlyTimer = null;
 function updateField(tool, field, value){
   if(!currentData[tool]) currentData[tool] = {};
   currentData[tool][field] = value;
   scheduleSave();
-  renderResultOnly();
+  // Debounce result re-render so it doesn't fire synchronously on every character
+  clearTimeout(resultOnlyTimer);
+  resultOnlyTimer = setTimeout(renderResultOnly, 150);
 }
 function updateToolRaw(tool, value){
   currentData[tool] = value;
   scheduleSave();
-  renderTool(); // structural changes (e.g. adding/removing tracker rows) still need a full re-render
+  toolResultEl = null; // reset cache since full re-render replaces the element
+  renderTool();
 }
 function renderResultOnly(){
-  // Updates only the result panel for the active tool, leaving input fields untouched
-  // so the browser never recreates the element the user is actively typing in.
   const resultFns = {
     truth: resultTruth, lag: resultLag, pnl: resultPNL, breakeven: resultBreakeven,
     snapshot: resultSnapshot, forecast: resultForecast,
   };
   const fn = resultFns[activeTab];
-  const resultContainer = document.getElementById('tool-result');
-  if (fn && resultContainer) {
-    resultContainer.innerHTML = fn();
-  }
+  const el = getToolResult();
+  if(fn && el) el.innerHTML = fn();
 }
 
 // ---------- NAV ----------
@@ -997,15 +985,10 @@ function handleEngineInput(e){
   currentData.engine = d;
   scheduleSave();
 
-  // Use requestAnimationFrame so the browser paints the current keystroke
-  // BEFORE running the potentially-expensive results update.
-  // This guarantees the input never feels blocked.
   clearTimeout(engineResultTimer);
   engineResultTimer = setTimeout(() => {
-    requestAnimationFrame(() => {
-      const resultsEl = document.getElementById('eng-results');
-      if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
-    });
+    const resultsEl = document.getElementById('eng-results');
+    if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
   }, 400);
 }
 
@@ -1017,10 +1000,8 @@ function updateEngineField(periodIndex, statement, key, val){
   scheduleSave();
   clearTimeout(engineResultTimer);
   engineResultTimer = setTimeout(() => {
-    requestAnimationFrame(() => {
-      const resultsEl = document.getElementById('eng-results');
-      if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
-    });
+    const resultsEl = document.getElementById('eng-results');
+    if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
   }, 400);
 }
 
