@@ -899,7 +899,7 @@ function renderEnginePeriods(d){
 function engineField(label, periodIndex, statement, key, value){
   return `<div class="eng-field">
     <label>${label}</label>
-    <input type="number" value="${escapeHtml(value)}" placeholder="0" oninput="updateEngineField(${periodIndex},'${statement}','${key}',this.value)">
+    <input type="text" inputmode="decimal" value="${escapeHtml(value)}" placeholder="0" oninput="updateEngineField(${periodIndex},'${statement}','${key}',this.value)">
   </div>`;
 }
 
@@ -930,13 +930,18 @@ function updateEnginePeriodLabel(i, val){
   scheduleSave();
   // label changes don't affect calculations, safe to skip full re-render
 }
+let engineResultTimer = null;
 function updateEngineField(periodIndex, statement, key, val){
   const d = getEngineData();
   d.periods[periodIndex][statement][key] = val;
   currentData.engine = d;
   scheduleSave();
-  const resultsEl = document.getElementById('eng-results');
-  if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+  // Debounce the expensive forecast recalculation — only runs after typing pauses
+  clearTimeout(engineResultTimer);
+  engineResultTimer = setTimeout(() => {
+    const resultsEl = document.getElementById('eng-results');
+    if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+  }, 300);
 }
 
 function renderEngineResults(d){
@@ -1040,11 +1045,13 @@ function renderEngineResults(d){
 
 // ---------- HELPERS ----------
 function field(label, tool, key, value, placeholder, type){
-  type = type || 'number';
-  placeholder = placeholder || '0';
+  const isNumber = !type || type === 'number';
+  const inputType = isNumber ? 'text' : type;
+  const inputMode = isNumber ? 'decimal' : undefined;
+  placeholder = placeholder || (isNumber ? '0' : '');
   return `<div class="field">
     <label>${label}</label>
-    <input type="${type}" value="${escapeHtml(value)}" placeholder="${placeholder}" oninput="updateField('${tool}','${key}',this.value)">
+    <input type="${inputType}" ${inputMode ? `inputmode="${inputMode}"` : ''} value="${escapeHtml(value)}" placeholder="${placeholder}" oninput="updateField('${tool}','${key}',this.value)">
   </div>`;
 }
 function escapeHtml(str){
