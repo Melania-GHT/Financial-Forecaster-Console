@@ -858,6 +858,14 @@ function renderEngine(c){
 
     <div id="eng-results">${renderEngineResults(d)}</div>
   </div>`;
+
+  // Wire up ONE delegated listener on the periods container — fires for all inputs
+  // inside it without ever re-attaching as inputs are added/removed.
+  // This replaces all inline oninput handlers and is far smoother.
+  const periodsContainer = c.querySelector('#eng-periods');
+  if(periodsContainer){
+    periodsContainer.addEventListener('input', handleEngineInput);
+  }
 }
 
 function renderEnginePeriods(d){
@@ -867,7 +875,9 @@ function renderEnginePeriods(d){
   return d.periods.map((p,i)=>`
     <div class="eng-period-card">
       <div class="eng-period-header">
-        <input type="text" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)" oninput="updateEnginePeriodLabel(${i},this.value)" style="max-width:240px; font-weight:700; color:var(--eng-brass);">
+        <input type="text" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
+          data-period="${i}" data-statement="label" data-key="label" class="eng-input"
+          style="max-width:240px; font-weight:700; color:var(--eng-brass);">
         <button class="eng-btn danger" onclick="removeEnginePeriod(${i})">Remove</button>
       </div>
 
@@ -899,7 +909,8 @@ function renderEnginePeriods(d){
 function engineField(label, periodIndex, statement, key, value){
   return `<div class="eng-field">
     <label>${label}</label>
-    <input type="text" inputmode="decimal" value="${escapeHtml(value)}" placeholder="0" oninput="updateEngineField(${periodIndex},'${statement}','${key}',this.value)">
+    <input type="text" inputmode="decimal" value="${escapeHtml(value)}" placeholder="0"
+      data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
   </div>`;
 }
 
@@ -930,18 +941,53 @@ function updateEnginePeriodLabel(i, val){
   scheduleSave();
   // label changes don't affect calculations, safe to skip full re-render
 }
+// Delegated input handler for all engine inputs — called from a single
+// event listener on #eng-periods, never re-attached on keystroke.
+function handleEngineInput(e){
+  const input = e.target;
+  if(!input.classList.contains('eng-input')) return;
+
+  const periodIndex = Number(input.dataset.period);
+  const statement = input.dataset.statement;
+  const key = input.dataset.key;
+  const val = input.value;
+
+  const d = getEngineData();
+
+  if(statement === 'label'){
+    d.periods[periodIndex].label = val;
+  } else {
+    d.periods[periodIndex][statement][key] = val;
+  }
+
+  currentData.engine = d;
+  scheduleSave();
+
+  // Use requestAnimationFrame so the browser paints the current keystroke
+  // BEFORE running the potentially-expensive results update.
+  // This guarantees the input never feels blocked.
+  clearTimeout(engineResultTimer);
+  engineResultTimer = setTimeout(() => {
+    requestAnimationFrame(() => {
+      const resultsEl = document.getElementById('eng-results');
+      if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+    });
+  }, 400);
+}
+
 let engineResultTimer = null;
 function updateEngineField(periodIndex, statement, key, val){
   const d = getEngineData();
   d.periods[periodIndex][statement][key] = val;
   currentData.engine = d;
   scheduleSave();
-  // Debounce the expensive forecast recalculation — only runs after typing pauses
   clearTimeout(engineResultTimer);
   engineResultTimer = setTimeout(() => {
-    const resultsEl = document.getElementById('eng-results');
-    if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
-  }, 300);
+    requestAnimationFrame(() => {
+      const resultsEl = document.getElementById('eng-results');
+      if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+    });
+  }, 400);
 }
 
 function renderEngineResults(d){
