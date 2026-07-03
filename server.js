@@ -9,6 +9,11 @@ const path = require('path');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Render (and most cloud platforms) sit behind a reverse proxy.
+// This tells Express to trust the X-Forwarded-* headers from that proxy,
+// which is required for secure cookies and correct req.ip to work.
+app.set('trust proxy', 1);
+
 if (!process.env.DATABASE_URL) {
   console.error('Missing DATABASE_URL environment variable. Set it in your Render dashboard.');
   process.exit(1);
@@ -52,9 +57,9 @@ app.use(session({
   saveUninitialized: false,
   cookie: {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    secure: true,       // Render always serves over HTTPS
+    sameSite: 'none',   // Required when secure:true behind a proxy
+    maxAge: 30 * 24 * 60 * 60 * 1000,
   },
 }));
 
