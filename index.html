@@ -246,7 +246,7 @@
 </div>
 
 <!-- APP SHELL (hidden until logged in) -->
-<div id="app-shell" class="app hidden">
+<div id="app-shell" class="app hidden" autocomplete="off">
   <nav class="sidebar">
     <div class="brand">
       <h1>The Clarity Console</h1>
@@ -908,7 +908,7 @@ function renderEnginePeriods(d){
   return d.periods.map((p,i)=>`
     <div class="eng-period-card">
       <div class="eng-period-header">
-        <input type="text" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
+        <input type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
           data-period="${i}" data-statement="label" data-key="label" class="eng-input"
           style="max-width:240px; font-weight:700; color:var(--eng-brass);">
         <button class="eng-btn danger" onclick="removeEnginePeriod(${i})">Remove</button>
@@ -942,7 +942,8 @@ function renderEnginePeriods(d){
 function engineField(label, periodIndex, statement, key, value){
   return `<div class="eng-field">
     <label>${label}</label>
-    <input type="text" inputmode="decimal" value="${escapeHtml(value)}" placeholder="0"
+    <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+      value="${escapeHtml(value)}" placeholder="0"
       data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
   </div>`;
 }
@@ -1126,11 +1127,13 @@ function renderEngineResults(d){
 function field(label, tool, key, value, placeholder, type){
   const isNumber = !type || type === 'number';
   const inputType = isNumber ? 'text' : type;
-  const inputMode = isNumber ? 'decimal' : undefined;
+  const inputMode = isNumber ? 'inputmode="decimal"' : '';
   placeholder = placeholder || (isNumber ? '0' : '');
   return `<div class="field">
     <label>${label}</label>
-    <input type="${inputType}" ${inputMode ? `inputmode="${inputMode}"` : ''} value="${escapeHtml(value)}" placeholder="${placeholder}" oninput="updateField('${tool}','${key}',this.value)">
+    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
+      value="${escapeHtml(value)}" placeholder="${placeholder}"
+      oninput="updateField('${tool}','${key}',this.value)">
   </div>`;
 }
 function escapeHtml(str){
