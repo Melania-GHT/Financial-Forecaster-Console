@@ -99,6 +99,14 @@
   .forecast-track{ flex:1; height:28px; background:var(--paper); border-radius:6px; overflow:hidden;}
   .forecast-fill{ height:100%; border-radius:6px; display:flex; align-items:center; padding-left:10px; color:#fff; font-size:12px; font-weight:700;}
   @media(max-width:720px){ .app{grid-template-columns:1fr;} .sidebar{position:relative;height:auto;} .main{padding:24px 18px 50px;} .grid2,.grid3{grid-template-columns:1fr;} }
+  /* Remove spinner arrows from ALL number inputs globally */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  /* Belt-and-suspenders: also remove from text inputs with decimal inputmode */
+  input[inputmode="decimal"]::-webkit-outer-spin-button,
+  input[inputmode="decimal"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
   .hidden{ display:none !important; }
 
   /* ===== FORECASTING ENGINE — dedicated instrument-panel theme ===== */
@@ -281,6 +289,37 @@ let currentEmail = "";
 let activeTab = "truth";
 let saveTimer = null;
 
+// Web Worker — all computation runs here, never on the main thread
+let worker = null;
+let workerCallbacks = {};
+let workerCallId = 0;
+
+function initWorker() {
+  if (!window.Worker) return; // fallback: no worker support, use sync path
+  worker = new Worker('/worker.js');
+  worker.onmessage = function(e) {
+    const { id, type, result, serialized, error } = e.data;
+    const cb = workerCallbacks[id];
+    if (cb) {
+      delete workerCallbacks[id];
+      cb({ type, result, serialized, error });
+    }
+  };
+  worker.onerror = function(e) {
+    console.warn('Worker error:', e.message);
+    worker = null; // fall back to sync if worker fails
+  };
+}
+
+function workerRun(type, payload) {
+  return new Promise((resolve) => {
+    if (!worker) { resolve(null); return; }
+    const id = ++workerCallId;
+    workerCallbacks[id] = resolve;
+    worker.postMessage({ type, payload, id });
+  });
+}
+
 function fmt(n){
   const num = Number(n)||0;
   const sign = num < 0 ? '-' : '';
@@ -361,6 +400,17 @@ function showApp(){
   document.getElementById('login-screen').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   document.getElementById('sidebar-email').textContent = currentEmail;
+  initWorker();
+
+  // Prevent up/down arrow keys from changing values in input fields
+  // This stops the spinner-like behavior on HP laptops with Windows
+  document.getElementById('app-shell').addEventListener('keydown', (e) => {
+    if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') &&
+        (e.target.tagName === 'INPUT')) {
+      e.preventDefault();
+    }
+  });
+
   renderNav();
   renderTool();
 }
@@ -416,9 +466,21 @@ function updateField(tool, field, value){
   if(!currentData[tool]) currentData[tool] = {};
   currentData[tool][field] = value;
   scheduleSave();
-  // Debounce result re-render so it doesn't fire synchronously on every character
+  // Debounce — then ask the worker to compute results off the main thread
   clearTimeout(resultOnlyTimer);
-  resultOnlyTimer = setTimeout(renderResultOnly, 150);
+  resultOnlyTimer = setTimeout(() => {
+    const el = getToolResult();
+    if (!el) return;
+    if (worker) {
+      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
+        .then(({ result }) => {
+          if (result !== undefined) renderResultFromWorker(result);
+        });
+    } else {
+      // Fallback: sync render if worker not available
+      renderResultOnly();
+    }
+  }, 100);
 }
 function updateToolRaw(tool, value){
   currentData[tool] = value;
@@ -426,6 +488,64 @@ function updateToolRaw(tool, value){
   toolResultEl = null; // reset cache since full re-render replaces the element
   renderTool();
 }
+function renderResultFromWorker(result){
+  const el = getToolResult();
+  if (!el || result === null) { if(el) el.innerHTML = ''; return; }
+
+  if (activeTab === 'truth') {
+    const { status, headline, story, action } = result;
+    el.innerHTML = `<div class="result"><span class="pill ${status}">${status==='good'?'Aligned':'Gap Detected'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>
+      <div class="card"><h3>This week's one move</h3><p class="card-sub">${action}</p></div>`;
+  }
+  else if (activeTab === 'lag') {
+    const { status, headline, story, lagDays } = result;
+    el.innerHTML = `<div class="result"><span class="pill ${status}">${lagDays<=0?'Healthy Gap':lagDays>20?'Danger Window':'Gap to Watch'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>`;
+  }
+  else if (activeTab === 'pnl') {
+    const { status, label, grossProfit, grossMargin, netProfit, netMargin, story } = result;
+    el.innerHTML = `<div class="result">
+      <div class="grid3" style="margin-bottom:6px;">
+        <div><div class="note">Gross Profit</div><div class="big" style="font-size:22px;">${fmt(grossProfit)}</div></div>
+        <div><div class="note">Gross Margin</div><div class="big" style="font-size:22px;">${grossMargin.toFixed(1)}%</div></div>
+        <div><div class="note">Net Profit</div><div class="big" style="font-size:22px;">${fmt(netProfit)}</div></div>
+      </div>
+      <span class="pill ${status}">${label} — ${netMargin.toFixed(1)}% net margin</span>
+      <p class="story" style="margin-top:14px;">${story}</p>
+    </div>`;
+  }
+  else if (activeTab === 'breakeven') {
+    const { headline, story } = result;
+    el.innerHTML = `<div class="result"><div class="big">${headline}</div><p class="story">${story}</p></div>`;
+  }
+  else if (activeTab === 'snapshot') {
+    const { net, cash, owed, name, period, revenue, expenses } = result;
+    el.innerHTML = `<div style="margin-top:22px;padding:22px 24px;border-radius:12px;background:var(--navy);color:#fff;">
+      <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:#9aa9bb;font-weight:700;">${escapeHtml(name)}</div>
+      <div style="font-size:14px;color:#cdd7e3;margin-bottom:18px;">${escapeHtml(period||'')}</div>
+      <div class="grid3">
+        <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Net Position</div><div class="big" style="color:#fff;">${fmt(net)}</div></div>
+        <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Cash on Hand</div><div class="big" style="color:#fff;">${fmt(cash)}</div></div>
+        <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Outstanding</div><div class="big" style="color:#fff;">${fmt(owed)}</div></div>
+      </div>
+      <p style="color:#cdd7e3;font-size:14px;margin-top:16px;">${escapeHtml(name)} brought in ${fmt(revenue)} and spent ${fmt(expenses)}, for a net position of ${fmt(net)}. Total available once collections come in: ${fmt(cash+owed)}.</p>
+    </div>`;
+  }
+  else if (activeTab === 'forecast') {
+    const { balances, firstNeg, story, startCash } = result;
+    const months = ['Month 1','Month 2','Month 3'];
+    const maxVal = Math.max(startCash, ...balances.map(b=>Math.abs(b)), 1);
+    el.innerHTML = `<div class="result">
+      <h3 style="margin-top:0;">Cash on hand, month by month</h3>
+      ${months.map((m,i)=>{
+        const bal=balances[i], pct=Math.min(Math.abs(bal)/maxVal*100,100);
+        const color=bal<0?'var(--rust)':(bal<startCash*0.5?'var(--amber)':'var(--sage)');
+        return `<div class="forecast-row"><div class="forecast-label">${m}</div><div class="forecast-track"><div class="forecast-fill" style="width:${pct}%;background:${color};">${fmt(bal)}</div></div></div>`;
+      }).join('')}
+      <p class="story" style="margin-top:18px;">${story}</p>
+    </div>`;
+  }
+}
+
 function renderResultOnly(){
   const resultFns = {
     truth: resultTruth, lag: resultLag, pnl: resultPNL, breakeven: resultBreakeven,
@@ -713,7 +833,7 @@ function renderTracker(c){
         ${rows.map((row,i)=>`
           <div class="trow">
             <input type="text" value="${escapeHtml(row.name)}" placeholder="What was it?" oninput="updateTrackerRow(${i},'name',this.value)">
-            <input type="number" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
+            <input type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
             <select onchange="updateTrackerRow(${i},'cat',this.value)">
               ${trackerCategories.map(cat=>`<option value="${cat}" ${row.cat===cat?'selected':''}>${cat}</option>`).join('')}
             </select>
@@ -985,10 +1105,46 @@ function handleEngineInput(e){
   currentData.engine = d;
   scheduleSave();
 
+  // Debounce, then offload forecast to worker
   clearTimeout(engineResultTimer);
   engineResultTimer = setTimeout(() => {
     const resultsEl = document.getElementById('eng-results');
-    if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+    if (!resultsEl) return;
+
+    // Quick check — not enough periods yet, update inline (cheap, no worker needed)
+    if (d.periods.length < 3) {
+      const needed = 3 - d.periods.length;
+      resultsEl.innerHTML = `<div class="eng-panel eng-panel-raised"><div class="eng-empty-state">Add ${needed} more period${needed!==1?'s':''} to generate your forecast.</div></div>`;
+      return;
+    }
+
+    // Has enough periods — build the forecast payload and send to worker
+    const incomplete = d.periods.some(p =>
+      p.income.revenue==='' || p.income.cogs==='' || p.income.opex==='' ||
+      p.balance.cash==='' || p.balance.otherAssets==='' || p.balance.totalLiabilities==='' || p.balance.equity==='' ||
+      p.cashflow.operatingCash==='' || p.cashflow.investingCash==='' || p.cashflow.financingCash===''
+    );
+    if (incomplete) {
+      resultsEl.innerHTML = `<div class="eng-panel eng-panel-raised"><div class="eng-empty-state">Fill in every field for each period to generate your forecast.</div></div>`;
+      return;
+    }
+
+    if (worker) {
+      workerRun('COMPUTE_FORECAST', {
+        periodType: d.periodType,
+        periodsAhead: d.forecastHorizon,
+        incomeStatement: d.periods.map(p => ({ revenue: Number(p.income.revenue), cogs: Number(p.income.cogs), opex: Number(p.income.opex) })),
+        balanceSheet: d.periods.map(p => ({ cash: Number(p.balance.cash), otherAssets: Number(p.balance.otherAssets), totalLiabilities: Number(p.balance.totalLiabilities), equity: Number(p.balance.equity) })),
+        cashFlow: d.periods.map(p => ({ operatingCash: Number(p.cashflow.operatingCash), investingCash: Number(p.cashflow.investingCash), financingCash: Number(p.cashflow.financingCash) })),
+      }).then(({ result }) => {
+        if (result) {
+          const el = document.getElementById('eng-results');
+          if (el) el.innerHTML = renderEngineForecastHTML(result, d);
+        }
+      });
+    } else {
+      resultsEl.innerHTML = renderEngineResults(d);
+    }
   }, 400);
 }
 
@@ -1003,6 +1159,53 @@ function updateEngineField(periodIndex, statement, key, val){
     const resultsEl = document.getElementById('eng-results');
     if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
   }, 400);
+}
+
+// Renders forecast HTML from a pre-computed result (returned by the worker)
+function renderEngineForecastHTML(result, d) {
+  const unit = d.periodType==='monthly' ? 'Month' : 'Quarter';
+  const futureLabels = Array.from({length: d.forecastHorizon}, (_,i) => `${unit} +${i+1}`);
+  return `
+    <div class="eng-narrative">${result.narrative}</div>
+    <div class="eng-panel" style="margin-top:20px;">
+      <h3>Key Flags</h3>
+      ${result.flags.map(f => `
+        <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--eng-line);">
+          <span class="eng-pill ${f.severity}">${f.severity}</span>
+          <p style="margin:8px 0 0;font-family:'Inter',sans-serif;font-size:13.5px;color:var(--eng-text-soft);line-height:1.6;">${escapeHtml(f.message)}</p>
+        </div>
+      `).join('')}
+    </div>
+    <div class="eng-panel">
+      <h3>Income Statement — Projected</h3>
+      <table>
+        <thead><tr><th>Line Item</th>${futureLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><td>Revenue</td>${result.projections.incomeStatement.revenue.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>Gross Profit</td>${result.projections.incomeStatement.grossProfit.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td style="font-weight:700;color:var(--eng-brass);">Net Profit</td>${result.projections.incomeStatement.netProfit.map(v=>`<td style="font-weight:700;">${fmt(v)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="eng-panel">
+      <h3>Cash Position — Projected</h3>
+      <table>
+        <thead><tr><th>Line Item</th>${futureLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><td>Operating Cash Flow</td>${result.projections.cashFlow.operatingCash.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td style="font-weight:700;color:var(--eng-brass);">Ending Cash Balance</td>${result.projections.cashFlow.endingCashBalance.map(v=>`<td style="font-weight:700;${v<0?'color:var(--eng-rust);':''}">${fmt(v)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="eng-panel">
+      <h3>Trend Summary</h3>
+      <table><tbody>
+        <tr><td>Revenue Growth Rate</td><td>${(result.trends.revenueGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+        <tr><td>Cash Growth Rate</td><td>${(result.trends.cashGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+        <tr><td>Liability Growth Rate</td><td>${(result.trends.liabilityGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+      </tbody></table>
+    </div>
+  `;
 }
 
 function renderEngineResults(d){
