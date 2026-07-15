@@ -416,29 +416,6 @@ function showApp(){
     // Block arrow keys from changing values (spinner/dropdown navigation)
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
-      return;
-    }
-    // Any normal character key — send Escape first to dismiss any open dropdown,
-    // then let the character through normally
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Programmatically blur and re-focus to dismiss any open suggestion dropdown
-      // without losing the value or cursor position
-      if (document.activeElement === input) {
-        // Only if there's likely a dropdown open (after first char)
-        if (input.value.length > 0) {
-          const val = input.value;
-          const sel = input.selectionStart;
-          const sel2 = input.selectionEnd;
-          input.setAttribute('autocomplete', 'off');
-          input.setAttribute('autocomplete', 'new-password');
-          // Restore selection
-          setTimeout(() => {
-            if (document.activeElement === input) {
-              input.setSelectionRange(sel, sel2);
-            }
-          }, 0);
-        }
-      }
     }
   });
 
