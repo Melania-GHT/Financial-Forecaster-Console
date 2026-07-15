@@ -260,7 +260,7 @@
 </div>
 
 <!-- APP SHELL (hidden until logged in) -->
-<div id="app-shell" class="app hidden" autocomplete="new-password">
+<div id="app-shell" class="app hidden" autocomplete="off">
   <nav class="sidebar">
     <div class="brand">
       <h1>The Clarity Console</h1>
@@ -483,17 +483,8 @@ function updateField(tool, field, value){
   clearTimeout(typingTimer);
   typingTimer = setTimeout(() => {
     isTyping = false;
-    // Now safe to update results
-    const el = getToolResult();
-    if (!el) return;
-    if (worker) {
-      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
-        .then(({ result }) => {
-          if (result !== undefined && !isTyping) renderResultFromWorker(result);
-        });
-    } else {
-      renderResultOnly();
-    }
+    // Disabled temporarily to isolate cursor issue
+    // Results will show when user clicks away from field
   }, 500);
 }
 function updateToolRaw(tool, value){
@@ -847,7 +838,7 @@ function renderTracker(c){
         ${rows.map((row,i)=>`
           <div class="trow">
             <input type="text" value="${escapeHtml(row.name)}" placeholder="What was it?" oninput="updateTrackerRow(${i},'name',this.value)">
-            <input type="text" inputmode="decimal" autocomplete="new-password" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
+            <input type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
             <select onchange="updateTrackerRow(${i},'cat',this.value)">
               ${trackerCategories.map(cat=>`<option value="${cat}" ${row.cat===cat?'selected':''}>${cat}</option>`).join('')}
             </select>
@@ -1030,7 +1021,7 @@ function renderEnginePeriods(d){
   return d.periods.map((p,i)=>`
     <div class="eng-period-card">
       <div class="eng-period-header">
-        <input type="text" autocomplete="new-password" spellcheck="false" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
+        <input type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
           data-period="${i}" data-statement="label" data-key="label" class="eng-input"
           style="max-width:240px; font-weight:700; color:var(--eng-brass);">
         <button class="eng-btn danger" onclick="removeEnginePeriod(${i})">Remove</button>
@@ -1062,11 +1053,9 @@ function renderEnginePeriods(d){
 }
 
 function engineField(label, periodIndex, statement, key, value){
-  const uniqueName = `clarity_eng_${periodIndex}_${statement}_${key}_${FIELD_NONCE}`;
   return `<div class="eng-field">
     <label>${label}</label>
-    <input type="text" inputmode="decimal" autocomplete="new-password" spellcheck="false"
-      name="${uniqueName}" id="${uniqueName}"
+    <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
       value="${escapeHtml(value)}" placeholder="0"
       data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
   </div>`;
@@ -1324,20 +1313,15 @@ function renderEngineResults(d){
 }
 
 // ---------- HELPERS ----------
-// Generate a random suffix so the browser never matches these fields to saved form history
-const FIELD_NONCE = Math.random().toString(36).slice(2);
-
 function field(label, tool, key, value, placeholder, type){
   const isNumber = !type || type === 'number';
   const inputType = isNumber ? 'text' : type;
   const inputMode = isNumber ? 'inputmode="decimal"' : '';
   placeholder = placeholder || (isNumber ? '0' : '');
   // Unique name per field instance prevents browser autocomplete matching
-  const uniqueName = `clarity_${tool}_${key}_${FIELD_NONCE}`;
   return `<div class="field">
     <label>${label}</label>
-    <input type="${inputType}" ${inputMode} autocomplete="new-password" spellcheck="false"
-      name="${uniqueName}" id="${uniqueName}"
+    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
       value="${escapeHtml(value)}" placeholder="${placeholder}"
       oninput="updateField('${tool}','${key}',this.value)">
   </div>`;
