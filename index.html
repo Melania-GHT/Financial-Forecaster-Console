@@ -100,9 +100,9 @@
   .forecast-fill{ height:100%; border-radius:6px; display:flex; align-items:center; padding-left:10px; color:#fff; font-size:12px; font-weight:700;}
   @media(max-width:720px){ .app{grid-template-columns:1fr;} .sidebar{position:relative;height:auto;} .main{padding:24px 18px 50px;} .grid2,.grid3{grid-template-columns:1fr;} }
   /* Remove spinner arrows from ALL number inputs globally */
-  input[type="number"]::-webkit-outer-spin-button,
-  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-  input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  input[type="text"]::-webkit-outer-spin-button,
+  input[type="text"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="text"] { -moz-appearance: textfield; appearance: textfield; }
   /* Belt-and-suspenders: also remove from text inputs with decimal inputmode */
   input[inputmode="decimal"]::-webkit-outer-spin-button,
   input[inputmode="decimal"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
