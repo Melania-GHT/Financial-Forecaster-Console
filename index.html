@@ -410,7 +410,8 @@ function showApp(){
 
   // Single delegated listener for all regular tool inputs
   // No inline oninput handlers — browser handles keystrokes natively
-  document.getElementById('tool-container').addEventListener('input', (e) => {
+  const toolContainer = document.getElementById('tool-container');
+  toolContainer.addEventListener('input', (e) => {
     const input = e.target;
     if (!input.classList.contains('tool-input')) return;
     const tool = input.dataset.tool;
@@ -423,6 +424,17 @@ function showApp(){
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => { isTyping = false; }, 500);
   });
+
+  // On focus, move cursor to end of field so typing appends correctly
+  toolContainer.addEventListener('focus', (e) => {
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    const len = input.value.length;
+    // Small delay needed for Edge on Windows to honour setSelectionRange on focus
+    setTimeout(() => {
+      try { input.setSelectionRange(len, len); } catch(err) {}
+    }, 0);
+  }, true);
 
   // Kill autocomplete dropdown interference on every keystroke
   // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
@@ -1027,6 +1039,15 @@ function renderEngine(c){
   const periodsContainer = c.querySelector('#eng-periods');
   if(periodsContainer){
     periodsContainer.addEventListener('input', handleEngineInput);
+    // Move cursor to end on focus for engine inputs too
+    periodsContainer.addEventListener('focus', (e) => {
+      const input = e.target;
+      if (!input.classList.contains('eng-input')) return;
+      const len = input.value.length;
+      setTimeout(() => {
+        try { input.setSelectionRange(len, len); } catch(err) {}
+      }, 0);
+    }, true);
   }
 }
 
@@ -1072,7 +1093,7 @@ function engineField(label, periodIndex, statement, key, value){
   return `<div class="eng-field">
     <label>${label}</label>
     <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
-      value="${escapeHtml(value)}" placeholder="0"
+      value="${escapeHtml(value)}" placeholder=""
       data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
   </div>`;
 }
@@ -1333,7 +1354,7 @@ function field(label, tool, key, value, placeholder, type){
   const isNumber = !type || type === 'number';
   const inputType = isNumber ? 'text' : type;
   const inputMode = isNumber ? 'inputmode="decimal"' : '';
-  placeholder = placeholder || (isNumber ? '0' : '');
+  placeholder = placeholder || '';
   return `<div class="field">
     <label>${label}</label>
     <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
