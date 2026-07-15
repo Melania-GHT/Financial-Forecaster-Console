@@ -419,6 +419,11 @@ function showApp(){
     if (!tool || !key) return;
     if (!currentData[tool]) currentData[tool] = {};
     currentData[tool][key] = input.value;
+    // Keep cursor at end after every keystroke
+    const len = input.value.length;
+    setTimeout(() => {
+      try { input.setSelectionRange(len, len); } catch(err) {}
+    }, 0);
     scheduleSave();
     isTyping = true;
     clearTimeout(typingTimer);
@@ -1146,6 +1151,12 @@ function handleEngineInput(e){
 
   currentData.engine = d;
   scheduleSave();
+
+  // Keep cursor at end after every keystroke
+  const len = input.value.length;
+  setTimeout(() => {
+    try { input.setSelectionRange(len, len); } catch(err) {}
+  }, 0);
 
   // Debounce, then offload forecast to worker
   clearTimeout(engineResultTimer);
