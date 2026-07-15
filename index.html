@@ -408,6 +408,22 @@ function showApp(){
   document.getElementById('sidebar-email').textContent = currentEmail;
   initWorker();
 
+  // Single delegated listener for all regular tool inputs
+  // No inline oninput handlers — browser handles keystrokes natively
+  document.getElementById('tool-container').addEventListener('input', (e) => {
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    const tool = input.dataset.tool;
+    const key = input.dataset.key;
+    if (!tool || !key) return;
+    if (!currentData[tool]) currentData[tool] = {};
+    currentData[tool][key] = input.value;
+    scheduleSave();
+    isTyping = true;
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => { isTyping = false; }, 500);
+  });
+
   // Kill autocomplete dropdown interference on every keystroke
   // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
   document.getElementById('app-shell').addEventListener('keydown', (e) => {
@@ -1318,12 +1334,11 @@ function field(label, tool, key, value, placeholder, type){
   const inputType = isNumber ? 'text' : type;
   const inputMode = isNumber ? 'inputmode="decimal"' : '';
   placeholder = placeholder || (isNumber ? '0' : '');
-  // Unique name per field instance prevents browser autocomplete matching
   return `<div class="field">
     <label>${label}</label>
     <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
-      value="${escapeHtml(value)}" placeholder="${placeholder}"
-      oninput="updateField('${tool}','${key}',this.value)">
+      data-tool="${tool}" data-key="${key}" class="tool-input"
+      value="${escapeHtml(value)}" placeholder="${placeholder}">
   </div>`;
 }
 function escapeHtml(str){
