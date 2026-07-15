@@ -470,25 +470,31 @@ let toolResultEl = null;
 function getToolResult(){ return toolResultEl || (toolResultEl = document.getElementById('tool-result')); }
 
 let resultOnlyTimer = null;
+let isTyping = false;
+let typingTimer = null;
+
 function updateField(tool, field, value){
   if(!currentData[tool]) currentData[tool] = {};
   currentData[tool][field] = value;
   scheduleSave();
-  // Debounce — then ask the worker to compute results off the main thread
-  clearTimeout(resultOnlyTimer);
-  resultOnlyTimer = setTimeout(() => {
+
+  // Mark as actively typing — results won't update until typing pauses
+  isTyping = true;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    // Now safe to update results
     const el = getToolResult();
     if (!el) return;
     if (worker) {
       workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
         .then(({ result }) => {
-          if (result !== undefined) renderResultFromWorker(result);
+          if (result !== undefined && !isTyping) renderResultFromWorker(result);
         });
     } else {
-      // Fallback: sync render if worker not available
       renderResultOnly();
     }
-  }, 100);
+  }, 500);
 }
 function updateToolRaw(tool, value){
   currentData[tool] = value;
