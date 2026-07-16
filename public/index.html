@@ -260,7 +260,7 @@
 </div>
 
 <!-- APP SHELL (hidden until logged in) -->
-<div id="app-shell" class="app hidden" autocomplete="new-password">
+<div id="app-shell" class="app hidden" autocomplete="off">
   <nav class="sidebar">
     <div class="brand">
       <h1>The Clarity Console</h1>
@@ -408,6 +408,39 @@ function showApp(){
   document.getElementById('sidebar-email').textContent = currentEmail;
   initWorker();
 
+  // Single delegated listener for all regular tool inputs
+  // No inline oninput handlers — browser handles keystrokes natively
+  const toolContainer = document.getElementById('tool-container');
+  toolContainer.addEventListener('input', (e) => {
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    const tool = input.dataset.tool;
+    const key = input.dataset.key;
+    if (!tool || !key) return;
+    if (!currentData[tool]) currentData[tool] = {};
+    currentData[tool][key] = input.value;
+    // Keep cursor at end after every keystroke
+    const len = input.value.length;
+    setTimeout(() => {
+      try { input.setSelectionRange(len, len); } catch(err) {}
+    }, 0);
+    scheduleSave();
+    isTyping = true;
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => { isTyping = false; }, 500);
+  });
+
+  // On focus, move cursor to end of field so typing appends correctly
+  toolContainer.addEventListener('focus', (e) => {
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    const len = input.value.length;
+    // Small delay needed for Edge on Windows to honour setSelectionRange on focus
+    setTimeout(() => {
+      try { input.setSelectionRange(len, len); } catch(err) {}
+    }, 0);
+  }, true);
+
   // Kill autocomplete dropdown interference on every keystroke
   // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
   document.getElementById('app-shell').addEventListener('keydown', (e) => {
@@ -416,29 +449,6 @@ function showApp(){
     // Block arrow keys from changing values (spinner/dropdown navigation)
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
-      return;
-    }
-    // Any normal character key — send Escape first to dismiss any open dropdown,
-    // then let the character through normally
-    if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-      // Programmatically blur and re-focus to dismiss any open suggestion dropdown
-      // without losing the value or cursor position
-      if (document.activeElement === input) {
-        // Only if there's likely a dropdown open (after first char)
-        if (input.value.length > 0) {
-          const val = input.value;
-          const sel = input.selectionStart;
-          const sel2 = input.selectionEnd;
-          input.setAttribute('autocomplete', 'off');
-          input.setAttribute('autocomplete', 'new-password');
-          // Restore selection
-          setTimeout(() => {
-            if (document.activeElement === input) {
-              input.setSelectionRange(sel, sel2);
-            }
-          }, 0);
-        }
-      }
     }
   });
 
@@ -493,25 +503,22 @@ let toolResultEl = null;
 function getToolResult(){ return toolResultEl || (toolResultEl = document.getElementById('tool-result')); }
 
 let resultOnlyTimer = null;
+let isTyping = false;
+let typingTimer = null;
+
 function updateField(tool, field, value){
   if(!currentData[tool]) currentData[tool] = {};
   currentData[tool][field] = value;
   scheduleSave();
-  // Debounce — then ask the worker to compute results off the main thread
-  clearTimeout(resultOnlyTimer);
-  resultOnlyTimer = setTimeout(() => {
-    const el = getToolResult();
-    if (!el) return;
-    if (worker) {
-      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
-        .then(({ result }) => {
-          if (result !== undefined) renderResultFromWorker(result);
-        });
-    } else {
-      // Fallback: sync render if worker not available
-      renderResultOnly();
-    }
-  }, 100);
+
+  // Mark as actively typing — results won't update until typing pauses
+  isTyping = true;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    // Disabled temporarily to isolate cursor issue
+    // Results will show when user clicks away from field
+  }, 500);
 }
 function updateToolRaw(tool, value){
   currentData[tool] = value;
@@ -864,7 +871,7 @@ function renderTracker(c){
         ${rows.map((row,i)=>`
           <div class="trow">
             <input type="text" value="${escapeHtml(row.name)}" placeholder="What was it?" oninput="updateTrackerRow(${i},'name',this.value)">
-            <input type="text" inputmode="decimal" autocomplete="new-password" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
+            <input type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
             <select onchange="updateTrackerRow(${i},'cat',this.value)">
               ${trackerCategories.map(cat=>`<option value="${cat}" ${row.cat===cat?'selected':''}>${cat}</option>`).join('')}
             </select>
@@ -1037,6 +1044,15 @@ function renderEngine(c){
   const periodsContainer = c.querySelector('#eng-periods');
   if(periodsContainer){
     periodsContainer.addEventListener('input', handleEngineInput);
+    // Move cursor to end on focus for engine inputs too
+    periodsContainer.addEventListener('focus', (e) => {
+      const input = e.target;
+      if (!input.classList.contains('eng-input')) return;
+      const len = input.value.length;
+      setTimeout(() => {
+        try { input.setSelectionRange(len, len); } catch(err) {}
+      }, 0);
+    }, true);
   }
 }
 
@@ -1047,7 +1063,7 @@ function renderEnginePeriods(d){
   return d.periods.map((p,i)=>`
     <div class="eng-period-card">
       <div class="eng-period-header">
-        <input type="text" autocomplete="new-password" spellcheck="false" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
+        <input type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
           data-period="${i}" data-statement="label" data-key="label" class="eng-input"
           style="max-width:240px; font-weight:700; color:var(--eng-brass);">
         <button class="eng-btn danger" onclick="removeEnginePeriod(${i})">Remove</button>
@@ -1079,12 +1095,10 @@ function renderEnginePeriods(d){
 }
 
 function engineField(label, periodIndex, statement, key, value){
-  const uniqueName = `clarity_eng_${periodIndex}_${statement}_${key}_${FIELD_NONCE}`;
   return `<div class="eng-field">
     <label>${label}</label>
-    <input type="text" inputmode="decimal" autocomplete="new-password" spellcheck="false"
-      name="${uniqueName}" id="${uniqueName}"
-      value="${escapeHtml(value)}" placeholder="0"
+    <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+      value="${escapeHtml(value)}" placeholder=""
       data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
   </div>`;
 }
@@ -1137,6 +1151,12 @@ function handleEngineInput(e){
 
   currentData.engine = d;
   scheduleSave();
+
+  // Keep cursor at end after every keystroke
+  const len = input.value.length;
+  setTimeout(() => {
+    try { input.setSelectionRange(len, len); } catch(err) {}
+  }, 0);
 
   // Debounce, then offload forecast to worker
   clearTimeout(engineResultTimer);
@@ -1341,22 +1361,16 @@ function renderEngineResults(d){
 }
 
 // ---------- HELPERS ----------
-// Generate a random suffix so the browser never matches these fields to saved form history
-const FIELD_NONCE = Math.random().toString(36).slice(2);
-
 function field(label, tool, key, value, placeholder, type){
   const isNumber = !type || type === 'number';
   const inputType = isNumber ? 'text' : type;
   const inputMode = isNumber ? 'inputmode="decimal"' : '';
-  placeholder = placeholder || (isNumber ? '0' : '');
-  // Unique name per field instance prevents browser autocomplete matching
-  const uniqueName = `clarity_${tool}_${key}_${FIELD_NONCE}`;
+  placeholder = placeholder || '';
   return `<div class="field">
     <label>${label}</label>
-    <input type="${inputType}" ${inputMode} autocomplete="new-password" spellcheck="false"
-      name="${uniqueName}" id="${uniqueName}"
-      value="${escapeHtml(value)}" placeholder="${placeholder}"
-      oninput="updateField('${tool}','${key}',this.value)">
+    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
+      data-tool="${tool}" data-key="${key}" class="tool-input"
+      value="${escapeHtml(value)}" placeholder="${placeholder}">
   </div>`;
 }
 function escapeHtml(str){
