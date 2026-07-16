@@ -233,7 +233,7 @@
   @media(max-width:720px){ .engine .eng-grid3, .engine .eng-grid4{ grid-template-columns:1fr; } }
 </style>
 </head>
-<body>
+<body dir="ltr">
 
 <!-- LOGIN SCREEN -->
 <div id="login-screen" class="login-wrap">
@@ -419,27 +419,11 @@ function showApp(){
     if (!tool || !key) return;
     if (!currentData[tool]) currentData[tool] = {};
     currentData[tool][key] = input.value;
-    // Keep cursor at end after every keystroke
-    const len = input.value.length;
-    setTimeout(() => {
-      try { input.setSelectionRange(len, len); } catch(err) {}
-    }, 0);
     scheduleSave();
     isTyping = true;
     clearTimeout(typingTimer);
     typingTimer = setTimeout(() => { isTyping = false; }, 500);
   });
-
-  // On focus, move cursor to end of field so typing appends correctly
-  toolContainer.addEventListener('focus', (e) => {
-    const input = e.target;
-    if (!input.classList.contains('tool-input')) return;
-    const len = input.value.length;
-    // Small delay needed for Edge on Windows to honour setSelectionRange on focus
-    setTimeout(() => {
-      try { input.setSelectionRange(len, len); } catch(err) {}
-    }, 0);
-  }, true);
 
   // Kill autocomplete dropdown interference on every keystroke
   // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
@@ -1044,15 +1028,6 @@ function renderEngine(c){
   const periodsContainer = c.querySelector('#eng-periods');
   if(periodsContainer){
     periodsContainer.addEventListener('input', handleEngineInput);
-    // Move cursor to end on focus for engine inputs too
-    periodsContainer.addEventListener('focus', (e) => {
-      const input = e.target;
-      if (!input.classList.contains('eng-input')) return;
-      const len = input.value.length;
-      setTimeout(() => {
-        try { input.setSelectionRange(len, len); } catch(err) {}
-      }, 0);
-    }, true);
   }
 }
 
@@ -1099,7 +1074,7 @@ function engineField(label, periodIndex, statement, key, value){
     <label>${label}</label>
     <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
       value="${escapeHtml(value)}" placeholder=""
-      data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
+      data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input" dir="ltr">
   </div>`;
 }
 
@@ -1151,12 +1126,6 @@ function handleEngineInput(e){
 
   currentData.engine = d;
   scheduleSave();
-
-  // Keep cursor at end after every keystroke
-  const len = input.value.length;
-  setTimeout(() => {
-    try { input.setSelectionRange(len, len); } catch(err) {}
-  }, 0);
 
   // Debounce, then offload forecast to worker
   clearTimeout(engineResultTimer);
@@ -1368,7 +1337,7 @@ function field(label, tool, key, value, placeholder, type){
   placeholder = placeholder || '';
   return `<div class="field">
     <label>${label}</label>
-    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
+    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false" dir="ltr"
       data-tool="${tool}" data-key="${key}" class="tool-input"
       value="${escapeHtml(value)}" placeholder="${placeholder}">
   </div>`;
