@@ -425,6 +425,26 @@ function showApp(){
     typingTimer = setTimeout(() => { isTyping = false; }, 500);
   });
 
+  // Update results immediately when Enter or Tab is pressed
+  toolContainer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== 'Tab') return;
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    if (e.key === 'Enter') e.preventDefault();
+    isTyping = false;
+    clearTimeout(typingTimer);
+    const el = getToolResult();
+    if (!el) return;
+    if (worker) {
+      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
+        .then(({ result }) => {
+          if (result !== undefined) renderResultFromWorker(result);
+        });
+    } else {
+      renderResultOnly();
+    }
+  });
+
   // Kill autocomplete dropdown interference on every keystroke
   // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
   document.getElementById('app-shell').addEventListener('keydown', (e) => {
@@ -1037,6 +1057,16 @@ function renderEngine(c){
   const periodsContainer = c.querySelector('#eng-periods');
   if(periodsContainer){
     periodsContainer.addEventListener('input', handleEngineInput);
+    // Update engine results immediately on Enter
+    periodsContainer.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const input = e.target;
+      if (!input.classList.contains('eng-input')) return;
+      e.preventDefault();
+      const d = getEngineData();
+      const resultsEl = document.getElementById('eng-results');
+      if (resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+    });
   }
 }
 
