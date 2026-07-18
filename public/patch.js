@@ -120,60 +120,6 @@
     setTimeout(addAdminLink, 1000);
     setTimeout(addAdminLink, 2000);
 
-    // Fix 7: Tracker row updates — save data immediately, only update summary on pause
-    var trackerTimer = null;
-    window.updateTrackerRow = function(i, field, val) {
-      if (!window.currentData['tracker']) window.currentData['tracker'] = {rows:[{name:'',amt:'',cat:'Payroll'}]};
-      var d = window.currentData['tracker'];
-      if (!d.rows[i]) return;
-      d.rows[i][field] = val;
-      if (typeof scheduleSave === 'function') scheduleSave();
-
-      if (field === 'name' || field === 'amt') {
-        // Don't re-render rows — just update the spending summary after pause
-        clearTimeout(trackerTimer);
-        trackerTimer = setTimeout(function() {
-          updateTrackerSummary(d);
-        }, 300);
-      } else {
-        // Category dropdown — re-render immediately (no typing involved)
-        if (typeof renderTool === 'function') renderTool();
-      }
-    };
-
-    // Updates only the spending summary without touching the input rows
-    function updateTrackerSummary(d) {
-      var rows = d.rows || [];
-      var totals = {};
-      var grand = 0;
-      rows.forEach(function(r) {
-        var amt = Number(r.amt) || 0;
-        if (amt <= 0) return;
-        totals[r.cat] = (totals[r.cat] || 0) + amt;
-        grand += amt;
-      });
-      var sorted = Object.entries(totals).sort(function(a,b){ return b[1]-a[1]; });
-      // Find the result div inside the tracker card
-      var resultEl = document.querySelector('#tool-container .result');
-      if (grand <= 0) {
-        if (resultEl) resultEl.style.display = 'none';
-        return;
-      }
-      var fmt = function(n){ return '$' + Math.abs(Number(n)||0).toLocaleString(undefined,{maximumFractionDigits:0}); };
-      var html = '<h3 style="margin-top:0;">Your top spending categories</h3>' +
-        '<table><thead><tr><th>Category</th><th>Total</th><th>% of spend</th></tr></thead><tbody>' +
-        sorted.map(function(e){ return '<tr><td>'+e[0]+'</td><td>'+fmt(e[1])+'</td><td>'+(e[1]/grand*100).toFixed(0)+'%</td></tr>'; }).join('') +
-        '</tbody></table>' +
-        '<p class="story" style="margin-top:16px;">You spent '+fmt(grand)+' total. '+sorted[0][0]+' was your single biggest category at '+fmt(sorted[0][1])+' ('+(sorted[0][1]/grand*100).toFixed(0)+'%).</p>';
-      if (resultEl) {
-        resultEl.innerHTML = html;
-        resultEl.style.display = '';
-      } else {
-        // No result div yet — do a full render
-        if (typeof renderTool === 'function') renderTool();
-      }
-    }
-
     console.log('[patch.js] All fixes applied.');
   });
 })();
