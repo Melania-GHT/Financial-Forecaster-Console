@@ -84,6 +84,24 @@
       }, 100);
     }, true);
 
+    // Fix 6: Add Admin link to sidebar
+    function addAdminLink() {
+      var sidebar = document.querySelector('.sidebar');
+      if (!sidebar || document.getElementById('admin-link')) return;
+      var link = document.createElement('a');
+      link.id = 'admin-link';
+      link.href = '/admin';
+      link.textContent = 'Admin Panel';
+      link.style.cssText = 'display:block;margin-top:12px;padding:9px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#9aa9bb;font-size:12px;text-align:center;text-decoration:none;font-family:Inter,sans-serif;';
+      link.onmouseover = function(){ this.style.color='#c9a227'; this.style.borderColor='#c9a227'; };
+      link.onmouseout = function(){ this.style.color='#9aa9bb'; this.style.borderColor='rgba(255,255,255,0.15)'; };
+      sidebar.appendChild(link);
+    }
+    // Try immediately and also after app loads
+    addAdminLink();
+    setTimeout(addAdminLink, 1000);
+    setTimeout(addAdminLink, 2000);
+
     console.log('[patch.js] All fixes applied.');
   });
 })();
