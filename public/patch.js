@@ -111,24 +111,24 @@
     setTimeout(addAdminLink, 2000);
 
     // Fix 7: Debounce tracker row updates so typing doesn't trigger full re-render
-    var originalUpdateTrackerRow = window.updateTrackerRow;
     var trackerTimer = null;
     window.updateTrackerRow = function(i, field, val) {
-      // Update the data immediately
-      var d = window.getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
+      // Always get fresh data from currentData
+      if (!window.currentData['tracker']) window.currentData['tracker'] = {rows:[{name:'',amt:'',cat:'Payroll'}]};
+      var d = window.currentData['tracker'];
+      if (!d.rows[i]) return;
       d.rows[i][field] = val;
-      window.currentData['tracker'] = d;
       if (typeof scheduleSave === 'function') scheduleSave();
 
-      // Only re-render after typing pauses (not on every keystroke)
+      // Only debounce text/number typing — dropdowns update immediately
       if (field === 'name' || field === 'amt') {
         clearTimeout(trackerTimer);
         trackerTimer = setTimeout(function() {
-          if (typeof updateToolRaw === 'function') updateToolRaw('tracker', d);
-        }, 600);
+          // Re-render with latest currentData (not stale d)
+          if (typeof renderTool === 'function') renderTool();
+        }, 300);
       } else {
-        // Category change (dropdown) — re-render immediately
-        if (typeof updateToolRaw === 'function') updateToolRaw('tracker', d);
+        if (typeof renderTool === 'function') renderTool();
       }
     };
 
