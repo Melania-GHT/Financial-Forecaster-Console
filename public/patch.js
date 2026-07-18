@@ -35,19 +35,22 @@
     };
 
     // Fix 2: Add Enter key handler to all tool inputs
+    // Also handle Tab leaving an input field
     document.addEventListener('keydown', function(e) {
-      if (e.key !== 'Enter') return;
+      if (e.key !== 'Enter' && e.key !== 'Tab') return;
       var input = e.target;
       if (!input || input.tagName !== 'INPUT') return;
       // Don't intercept login form
       if (input.closest('#login-screen')) return;
 
-      e.preventDefault();
+      if (e.key === 'Enter') e.preventDefault();
       clearTimeout(window._patchTimer);
 
-      var el = document.getElementById('tool-result');
-      if (!el) return;
-      if (typeof renderResultOnly === 'function') renderResultOnly();
+      setTimeout(function() {
+        var el = document.getElementById('tool-result');
+        if (!el) return;
+        if (typeof renderResultOnly === 'function') renderResultOnly();
+      }, 50);
     }, true);
 
     // Fix 3: Add dir=ltr to body
@@ -67,6 +70,19 @@
     observer.observe(document.getElementById('tool-container') || document.body, {
       childList: true, subtree: true
     });
+
+    // Fix 5: Update results when focus leaves any input field
+    document.addEventListener('blur', function(e) {
+      var input = e.target;
+      if (!input || input.tagName !== 'INPUT') return;
+      if (input.closest('#login-screen')) return;
+      clearTimeout(window._patchTimer);
+      window._patchTimer = setTimeout(function() {
+        var el = document.getElementById('tool-result');
+        if (!el) return;
+        if (typeof renderResultOnly === 'function') renderResultOnly();
+      }, 100);
+    }, true);
 
     console.log('[patch.js] All fixes applied.');
   });
