@@ -120,6 +120,19 @@
     setTimeout(addAdminLink, 1000);
     setTimeout(addAdminLink, 2000);
 
+    // Fix 7: Fix tracker inputs — they get recreated on every keystroke so need special handling
+    document.addEventListener('focusin', function(e) {
+      var input = e.target;
+      if (!input || input.tagName !== 'INPUT') return;
+      if (input.getAttribute('dir') === 'ltr') return;
+      // Apply dir=ltr immediately when any input receives focus
+      input.setAttribute('dir', 'ltr');
+      if (input.type === 'number') {
+        input.setAttribute('type', 'text');
+        input.setAttribute('inputmode', 'decimal');
+      }
+    }, true);
+
     console.log('[patch.js] All fixes applied.');
   });
 })();
