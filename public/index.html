@@ -427,7 +427,7 @@ function showApp(){
     scheduleSave();
     isTyping = true;
     clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => { isTyping = false; }, 500);
+    typingTimer = setTimeout(() => { isTyping = false; var el = document.getElementById('tool-result'); if(el && worker) { workerRun('COMPUTE_RESULT',{tool:activeTab,data:currentData[activeTab]||{}}).then(function(r){if(r&&r.result){renderResultFromWorker(r.result);}}); } else if(el) { renderResultOnly(); } }, 600);
   });
 
   // On focus, move cursor to end of field so typing appends correctly
