@@ -1,0 +1,1391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>The Clarity Console — Know Your Numbers</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink: #1b2430; --ink-soft: #3c4756;
+    --paper: #f7f4ee; --paper-raised: #ffffff; --line: #e3ddd0;
+    --amber: #c8862b; --amber-soft: #f3e3c8;
+    --sage: #5c7a5e; --sage-soft: #e3ebe2;
+    --rust: #a8503e; --rust-soft: #f1ddd6;
+    --navy: #1f3148;
+    --shadow: 0 1px 2px rgba(27,36,48,0.04), 0 8px 24px rgba(27,36,48,0.06);
+    --radius: 14px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{ background:var(--paper); color:var(--ink); font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased; }
+  h1,h2,h3{ font-family:'Fraunces',serif; font-weight:600; letter-spacing:-0.01em; }
+
+  /* LOGIN SCREEN */
+  .login-wrap{ min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .login-card{ max-width:400px; width:100%; background:#fff; border-radius:16px; border:1px solid var(--line); padding:36px 32px; box-shadow:var(--shadow); }
+  .mark{ width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg, var(--amber), #e0a85a); display:flex;align-items:center;justify-content:center; font-family:'Fraunces',serif; font-weight:700; color:var(--navy); font-size:19px; margin-bottom:16px;}
+  .login-card h1{ font-size:22px; margin:0 0 6px; }
+  .login-card p.sub{ color:var(--ink-soft); font-size:14px; margin:0 0 22px; line-height:1.5; }
+  .toggle-row{ display:flex; gap:8px; margin-bottom:20px; background:var(--paper); border-radius:10px; padding:4px;}
+  .toggle-btn{ flex:1; padding:9px 0; border:none; background:none; border-radius:8px; font-size:13.5px; font-weight:600; color:var(--ink-soft); cursor:pointer; font-family:'Inter',sans-serif;}
+  .toggle-btn.active{ background:#fff; color:var(--navy); box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+  label{ font-size:12.5px; font-weight:600; color:var(--ink-soft); display:block; margin-bottom:6px;}
+  input{ width:100%; padding:11px 13px; border:1.5px solid var(--line); border-radius:9px; font-size:15px; font-family:'Inter',sans-serif; background:#fdfcfa; color:var(--ink); margin-bottom:14px;}
+  input:focus{ outline:none; border-color:var(--amber); }
+  .err{ color:var(--rust); font-size:13px; margin:-4px 0 14px; }
+  .login-btn{ width:100%; background:var(--navy); color:#fff; border:none; padding:13px 0; border-radius:9px; font-size:14.5px; font-weight:600; cursor:pointer; font-family:'Inter',sans-serif;}
+  .login-btn:disabled{ opacity:0.6; cursor:not-allowed; }
+  .footnote{ font-size:12px; color:#9a9080; margin-top:16px; line-height:1.5; }
+
+  /* APP SHELL */
+  .app{ display:grid; grid-template-columns:270px 1fr; min-height:100vh; }
+  .sidebar{ background:var(--navy); color:#eef1f4; padding:28px 18px; position:sticky; top:0; height:100vh; overflow-y:auto;}
+  .brand{ margin-bottom:8px; padding:0 6px;}
+  .brand h1{ font-size:17px; color:#fff; margin:0;}
+  .brand .email{ font-size:11.5px; color:#9aa9bb; margin:4px 0 0; word-break:break-all;}
+  .nav-section{ margin-top:22px;}
+  .nav-label{ font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:#7e90a5; padding:0 6px; margin-bottom:6px; font-weight:600;}
+  .nav-item{ display:flex; align-items:center; gap:10px; width:100%; text-align:left; background:none; border:none; color:#cdd7e3; padding:9px 8px; border-radius:9px; font-size:13.5px; font-family:'Inter',sans-serif; cursor:pointer; margin-bottom:2px;}
+  .nav-item:hover{ background:rgba(255,255,255,0.06); color:#fff;}
+  .nav-item.active{ background:rgba(200,134,43,0.18); color:#f3d9ad; font-weight:600;}
+  .nav-item .num{ width:18px;height:18px;border-radius:50%;background:rgba(255,255,255,0.08); color:#9aa9bb; font-size:10.5px; display:flex;align-items:center;justify-content:center; flex-shrink:0; font-weight:700;}
+  .nav-item.active .num{ background:var(--amber); color:var(--navy);}
+  .logout-btn{ margin-top:28px; background:none; border:1px solid rgba(255,255,255,0.15); color:#9aa9bb; padding:9px 12px; border-radius:9px; font-size:13px; cursor:pointer; width:100%; font-family:'Inter',sans-serif;}
+
+  .main{ padding:36px 48px 70px; max-width:920px; }
+  .save-status{ min-height:18px; font-size:12px; color:#9a9080; margin-bottom:6px;}
+  .topline{ margin-bottom:32px;}
+  .eyebrow{ font-size:12.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--amber); font-weight:700; margin-bottom:6px;}
+  .topline h2{ font-size:28px; margin:0 0 8px; }
+  .topline .sub{ color:var(--ink-soft); font-size:15px; max-width:560px; line-height:1.5; margin:0;}
+
+  .card{ background:#fff; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); padding:28px; margin-bottom:24px;}
+  .card h3{ font-size:18px; margin:0 0 4px;}
+  .card-sub{ color:var(--ink-soft); font-size:13.5px; margin-bottom:20px; line-height:1.5;}
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:16px;}
+  .grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px;}
+  .field{ margin-bottom:16px;}
+  .field label{ margin-bottom:6px;}
+  .field input{ margin-bottom:0;}
+
+  .btn{ background:var(--navy); color:#fff; border:none; padding:13px 22px; border-radius:9px; font-size:14.5px; font-weight:600; font-family:'Inter',sans-serif; cursor:pointer;}
+  .btn.secondary{ background:none; border:1.5px solid var(--line); color:var(--ink-soft);}
+
+  .result{ margin-top:22px; padding:22px 24px; border-radius:12px; border:1.5px solid var(--line); background:#fbf9f4;}
+  .big{ font-family:'Fraunces',serif; font-size:30px; font-weight:600; margin:10px 0 10px;}
+  .story{ font-size:15px; line-height:1.6; color:var(--ink-soft); margin:0;}
+  .pill{ display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:20px; font-size:12.5px; font-weight:700; text-transform:uppercase; letter-spacing:0.03em;}
+  .pill.good{ background:var(--sage-soft); color:var(--sage);}
+  .pill.watch{ background:var(--amber-soft); color:#92611c;}
+  .pill.bad{ background:var(--rust-soft); color:var(--rust);}
+
+  table{ width:100%; border-collapse:collapse; margin-top:8px;}
+  th{ text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:0.05em; color:#8a8071; padding:8px 10px; border-bottom:1.5px solid var(--line); font-weight:700;}
+  td{ padding:10px 10px; font-size:14px; border-bottom:1px solid var(--line);}
+  select{ width:100%; padding:10px 12px; border:1.5px solid var(--line); border-radius:9px; font-family:'Inter',sans-serif; font-size:14px; background:#fdfcfa; color:var(--ink);}
+  .trow{ display:grid; grid-template-columns:1fr 110px 150px 32px; gap:10px; align-items:center; margin-bottom:8px;}
+  .trow input{ margin-bottom:0; padding:9px 11px; font-size:14px;}
+  .remove-btn{ background:none; border:none; color:#b5a99a; cursor:pointer; font-size:18px;}
+  .add-row-btn{ font-size:13px; color:var(--navy); background:none; border:1.5px dashed var(--line); border-radius:9px; padding:9px 14px; cursor:pointer; font-weight:600; width:100%; margin-top:6px;}
+  .quiz-q{ padding:16px 0; border-bottom:1px solid var(--line);}
+  .quiz-opts{ display:flex; gap:10px;}
+  .quiz-opt{ padding:8px 16px; border:1.5px solid var(--line); border-radius:20px; font-size:13.5px; cursor:pointer; background:#fff; font-weight:600; color:var(--ink-soft);}
+  .quiz-opt.selected{ background:var(--navy); color:#fff; border-color:var(--navy);}
+  .note{ font-size:13px; color:#9a9080; font-style:italic; margin-top:6px;}
+  .forecast-row{ display:flex; align-items:center; gap:12px; margin-bottom:10px;}
+  .forecast-label{ width:80px; font-size:13px; font-weight:600; color:var(--ink-soft); flex-shrink:0;}
+  .forecast-track{ flex:1; height:28px; background:var(--paper); border-radius:6px; overflow:hidden;}
+  .forecast-fill{ height:100%; border-radius:6px; display:flex; align-items:center; padding-left:10px; color:#fff; font-size:12px; font-weight:700;}
+  @media(max-width:720px){ .app{grid-template-columns:1fr;} .sidebar{position:relative;height:auto;} .main{padding:24px 18px 50px;} .grid2,.grid3{grid-template-columns:1fr;} }
+  /* Aggressively suppress browser autocomplete dropdowns */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus { -webkit-box-shadow: 0 0 0px 1000px white inset !important; }
+  input::-ms-reveal, input::-ms-clear { display: none !important; }
+
+  /* Remove spinner arrows from ALL number inputs globally */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+  input[type="number"] { -moz-appearance: textfield; appearance: textfield; }
+  /* Belt-and-suspenders: also remove from text inputs with decimal inputmode */
+  input[inputmode="decimal"]::-webkit-outer-spin-button,
+  input[inputmode="decimal"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+  .hidden{ display:none !important; }
+
+  /* ===== FORECASTING ENGINE — dedicated instrument-panel theme ===== */
+  .engine{
+    --eng-bg: #0F1419;
+    --eng-panel: #1C2733;
+    --eng-panel-raised: #222F3D;
+    --eng-line: #2E3D4D;
+    --eng-text: #E8E4DB;
+    --eng-text-soft: #9BAAB8;
+    --eng-brass: #C9A227;
+    --eng-sage: #6B8F71;
+    --eng-rust: #A85D4F;
+    background: var(--eng-bg);
+    color: var(--eng-text);
+    border-radius: 16px;
+    padding: 32px;
+    margin: -8px -8px 0;
+  }
+  .engine, .engine input, .engine select, .engine button{
+    font-family: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+  }
+  .engine .eng-headline{
+    font-family: 'Fraunces', serif;
+    font-weight: 600;
+    color: var(--eng-text);
+  }
+  .engine .eng-eyebrow{
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.12em;
+    color: var(--eng-brass); font-weight: 700; margin-bottom: 8px;
+  }
+  .engine .eng-title{ font-size: 26px; margin: 0 0 10px; }
+  .engine .eng-sub{ color: var(--eng-text-soft); font-size: 14px; line-height: 1.6; max-width: 600px; font-family: 'Inter', sans-serif; }
+  .engine .eng-panel{
+    background: var(--eng-panel);
+    border: 1px solid var(--eng-line);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  .engine .eng-panel-raised{ background: var(--eng-panel-raised); }
+  .engine .eng-panel h3{
+    font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13px;
+    text-transform: uppercase; letter-spacing: 0.08em; color: var(--eng-text-soft);
+    margin: 0 0 16px; padding-bottom: 12px; border-bottom: 1px solid var(--eng-line);
+  }
+  .engine label{
+    font-family: 'Inter', sans-serif; font-size: 11.5px; font-weight: 600;
+    color: var(--eng-text-soft); text-transform: uppercase; letter-spacing: 0.04em;
+    display: block; margin-bottom: 6px;
+  }
+  .engine input, .engine select{
+    width: 100%; padding: 10px 12px; border: 1px solid var(--eng-line);
+    border-radius: 6px; font-size: 14px; background: var(--eng-bg); color: var(--eng-text);
+  }
+  .engine input:focus, .engine select:focus{ outline: none; border-color: var(--eng-brass); }
+  .engine .eng-field{ margin-bottom: 14px; }
+  .engine .eng-btn{
+    background: var(--eng-brass); color: var(--eng-bg); border: none;
+    padding: 11px 20px; border-radius: 6px; font-size: 13px; font-weight: 700;
+    cursor: pointer; text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .engine .eng-btn:hover{ background: #DDB73A; }
+  .engine .eng-btn.secondary{
+    background: none; border: 1px solid var(--eng-line); color: var(--eng-text-soft);
+  }
+  .engine .eng-btn.secondary:hover{ border-color: var(--eng-brass); color: var(--eng-brass); }
+  .engine .eng-btn.danger{
+    background: none; border: 1px solid var(--eng-rust); color: var(--eng-rust);
+    padding: 8px 14px; font-size: 12px;
+  }
+  .engine table{ width: 100%; border-collapse: collapse; }
+  .engine th{
+    text-align: right; font-family: 'Inter', sans-serif; font-size: 10.5px;
+    text-transform: uppercase; letter-spacing: 0.05em; color: var(--eng-text-soft);
+    padding: 8px 10px; border-bottom: 1px solid var(--eng-line); font-weight: 700;
+  }
+  .engine th:first-child{ text-align: left; }
+  .engine td{
+    text-align: right; padding: 10px; font-size: 13.5px; border-bottom: 1px solid var(--eng-line);
+    font-variant-numeric: tabular-nums;
+  }
+  .engine td:first-child{ text-align: left; font-family: 'Inter', sans-serif; color: var(--eng-text-soft); }
+  .engine .eng-pill{
+    display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+    border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.04em; font-family: 'Inter', sans-serif;
+  }
+  .engine .eng-pill.good{ background: rgba(107,143,113,0.15); color: var(--eng-sage); }
+  .engine .eng-pill.warning{ background: rgba(201,162,39,0.15); color: var(--eng-brass); }
+  .engine .eng-pill.critical{ background: rgba(168,93,79,0.15); color: var(--eng-rust); }
+  .engine .eng-narrative{
+    font-family: 'Fraunces', serif; font-size: 17px; line-height: 1.7;
+    color: var(--eng-text); padding: 24px; background: var(--eng-panel-raised);
+    border-left: 3px solid var(--eng-brass); border-radius: 4px;
+  }
+  .engine .eng-sparkline{ display: inline-block; vertical-align: middle; margin-left: 10px; }
+  .engine .eng-period-card{
+    background: var(--eng-panel-raised); border: 1px solid var(--eng-line);
+    border-radius: 8px; padding: 18px; margin-bottom: 12px;
+  }
+  .engine .eng-period-header{
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 14px; font-family: 'Inter', sans-serif;
+  }
+  .engine .eng-period-label{ font-size: 13px; font-weight: 700; color: var(--eng-brass); }
+  .engine .eng-grid3{ display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+  .engine .eng-grid4{ display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+  .engine .eng-section-label{
+    font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--eng-brass);
+    margin: 18px 0 10px;
+  }
+  .engine .eng-empty-state{
+    text-align: center; padding: 48px 24px; color: var(--eng-text-soft);
+    font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.6;
+  }
+  @media(max-width:720px){ .engine .eng-grid3, .engine .eng-grid4{ grid-template-columns:1fr; } }
+</style>
+</head>
+<body dir="ltr">
+
+<!-- LOGIN SCREEN -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-card">
+    <div class="mark">C</div>
+    <h1>The Clarity Console</h1>
+    <p class="sub">Your private financial dashboard. Your numbers are saved to your account and visible only to you.</p>
+
+    <div class="toggle-row">
+      <button class="toggle-btn active" id="tab-login" onclick="setAuthMode('login')">Log In</button>
+      <button class="toggle-btn" id="tab-signup" onclick="setAuthMode('signup')">Create Account</button>
+    </div>
+
+    <form id="auth-form">
+      <label>Email address</label>
+      <input type="email" id="auth-email" placeholder="you@yourbusiness.com" required>
+      <label>Password</label>
+      <input type="password" id="auth-password" placeholder="At least 8 characters" required>
+      <div class="err hidden" id="auth-error"></div>
+      <button type="submit" class="login-btn" id="auth-submit">Log In</button>
+    </form>
+    <p class="footnote" id="auth-footnote">Don't have an account yet? Click "Create Account" above.</p>
+  </div>
+</div>
+
+<!-- APP SHELL (hidden until logged in) -->
+<div id="app-shell" class="app hidden" autocomplete="off">
+  <nav class="sidebar">
+    <div class="brand">
+      <h1>The Clarity Console</h1>
+      <p class="email" id="sidebar-email"></p>
+    </div>
+    <div id="nav-container"></div>
+    <button class="logout-btn" onclick="logout()">Log out</button>
+  </nav>
+  <main class="main">
+    <div class="save-status" id="save-status"></div>
+    <div id="tool-container"></div>
+  </main>
+</div>
+
+<script src="/forecastEngine.js"></script>
+<script>
+const TOOLS = [
+  { id: "truth", label: "Cash Truth Check", group: "Start Here", n: 1 },
+  { id: "lag", label: "Cash Lag Calculator", group: "Start Here", n: 2 },
+  { id: "quiz", label: "Am I Okay? Quiz", group: "Start Here", n: 3 },
+  { id: "pnl", label: "Read Your P&L", group: "Understand Your Numbers", n: 4 },
+  { id: "breakeven", label: "Break-Even Reveal", group: "Understand Your Numbers", n: 5 },
+  { id: "tracker", label: "Money Tracker", group: "Find & Fix Leaks", n: 6 },
+  { id: "snapshot", label: "Profit Snapshot", group: "Find & Fix Leaks", n: 7 },
+  { id: "forecast", label: "90-Day Forecaster", group: "Look Ahead", n: 8 },
+  { id: "engine", label: "The Forecasting Engine", group: "Advanced", n: 9 },
+];
+const GROUPS = ["Start Here", "Understand Your Numbers", "Find & Fix Leaks", "Look Ahead", "Advanced"];
+
+let currentData = {};
+let currentEmail = "";
+let activeTab = "truth";
+let saveTimer = null;
+
+// Web Worker — all computation runs here, never on the main thread
+let worker = null;
+let workerCallbacks = {};
+let workerCallId = 0;
+
+function initWorker() {
+  if (!window.Worker) return; // fallback: no worker support, use sync path
+  worker = new Worker('/worker.js');
+  worker.onmessage = function(e) {
+    const { id, type, result, serialized, error } = e.data;
+    const cb = workerCallbacks[id];
+    if (cb) {
+      delete workerCallbacks[id];
+      cb({ type, result, serialized, error });
+    }
+  };
+  worker.onerror = function(e) {
+    console.warn('Worker error:', e.message);
+    worker = null; // fall back to sync if worker fails
+  };
+}
+
+function workerRun(type, payload) {
+  return new Promise((resolve) => {
+    if (!worker) { resolve(null); return; }
+    const id = ++workerCallId;
+    workerCallbacks[id] = resolve;
+    worker.postMessage({ type, payload, id });
+  });
+}
+
+function fmt(n){
+  const num = Number(n)||0;
+  const sign = num < 0 ? '-' : '';
+  return sign + '$' + Math.abs(num).toLocaleString(undefined,{maximumFractionDigits:0});
+}
+
+// Wrapper that always sends session cookies — required for auth to work correctly
+function apiFetch(url, opts){
+  return fetch(url, Object.assign({ credentials: 'include' }, opts));
+}
+
+// ---------- AUTH ----------
+let authMode = 'login';
+function setAuthMode(mode){
+  authMode = mode;
+  document.getElementById('tab-login').classList.toggle('active', mode==='login');
+  document.getElementById('tab-signup').classList.toggle('active', mode==='signup');
+  document.getElementById('auth-submit').textContent = mode==='login' ? 'Log In' : 'Create Account';
+  document.getElementById('auth-footnote').textContent = mode==='login'
+    ? "Don't have an account yet? Click \"Create Account\" above."
+    : 'Already have an account? Click "Log In" above.';
+  document.getElementById('auth-error').classList.add('hidden');
+}
+
+document.getElementById('auth-form').addEventListener('submit', async (e)=>{
+  e.preventDefault();
+  const email = document.getElementById('auth-email').value;
+  const password = document.getElementById('auth-password').value;
+  const errEl = document.getElementById('auth-error');
+  const submitBtn = document.getElementById('auth-submit');
+  errEl.classList.add('hidden');
+  submitBtn.disabled = true;
+
+  try{
+    const res = await apiFetch('/api/' + authMode, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({email, password})
+    });
+    const body = await res.json();
+    if(!res.ok){
+      errEl.textContent = body.error || 'Something went wrong.';
+      errEl.classList.remove('hidden');
+      submitBtn.disabled = false;
+      return;
+    }
+    currentEmail = body.email;
+    await loadUserData();
+    showApp();
+  }catch(err){
+    errEl.textContent = 'Could not reach the server. Please try again.';
+    errEl.classList.remove('hidden');
+  }
+  submitBtn.disabled = false;
+});
+
+async function logout(){
+  await apiFetch('/api/logout', {method:'POST'});
+  currentEmail = '';
+  currentData = {};
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('login-screen').classList.remove('hidden');
+  document.getElementById('auth-email').value='';
+  document.getElementById('auth-password').value='';
+}
+
+async function loadUserData(){
+  const res = await apiFetch('/api/data');
+  if(res.ok){
+    const body = await res.json();
+    currentData = body.data || {};
+  } else {
+    currentData = {};
+  }
+}
+
+function showApp(){
+  document.getElementById('login-screen').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('hidden');
+  document.getElementById('sidebar-email').textContent = currentEmail;
+  initWorker();
+
+  // Single delegated listener for all regular tool inputs
+  // No inline oninput handlers — browser handles keystrokes natively
+  const toolContainer = document.getElementById('tool-container');
+  toolContainer.addEventListener('input', (e) => {
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    const tool = input.dataset.tool;
+    const key = input.dataset.key;
+    if (!tool || !key) return;
+    if (!currentData[tool]) currentData[tool] = {};
+    currentData[tool][key] = input.value;
+    scheduleSave();
+    isTyping = true;
+    clearTimeout(typingTimer);
+    typingTimer = setTimeout(() => { isTyping = false; }, 500);
+  });
+
+  // Update results immediately when Enter or Tab is pressed
+  toolContainer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== 'Tab') return;
+    const input = e.target;
+    if (!input.classList.contains('tool-input')) return;
+    if (e.key === 'Enter') e.preventDefault();
+    isTyping = false;
+    clearTimeout(typingTimer);
+    const el = getToolResult();
+    if (!el) return;
+    if (worker) {
+      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
+        .then(({ result }) => {
+          if (result !== undefined) renderResultFromWorker(result);
+        });
+    } else {
+      renderResultOnly();
+    }
+  });
+
+  // Kill autocomplete dropdown interference on every keystroke
+  // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
+  document.getElementById('app-shell').addEventListener('keydown', (e) => {
+    const input = e.target;
+    if (input.tagName !== 'INPUT') return;
+    // Block arrow keys from changing values (spinner/dropdown navigation)
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+    }
+  });
+
+  renderNav();
+  renderTool();
+}
+
+// check if already logged in on page load
+(async function checkSession(){
+  try{
+    const res = await apiFetch('/api/me');
+    const body = await res.json();
+    if(body.loggedIn){
+      currentEmail = body.email;
+      await loadUserData();
+      showApp();
+    }
+  }catch(e){}
+})();
+
+// ---------- SAVE (debounced) ----------
+let saveStatusEl = null;
+function getSaveStatus(){ return saveStatusEl || (saveStatusEl = document.getElementById('save-status')); }
+
+function scheduleSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      const res = await apiFetch('/api/data', {
+        method:'PUT',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({data: currentData})
+      });
+      const el = getSaveStatus();
+      if(el){ el.textContent = res.ok ? 'Saved' : 'Could not save'; }
+      setTimeout(()=>{
+        const el = getSaveStatus();
+        if(el && el.textContent !== 'Saving...') el.textContent = '';
+      }, 1500);
+    }catch(e){
+      const el = getSaveStatus();
+      if(el) el.textContent = 'Could not save (offline?)';
+    }
+  }, 2000);
+}
+
+function getToolData(tool, fallback){
+  if(!currentData[tool]) currentData[tool] = JSON.parse(JSON.stringify(fallback));
+  return currentData[tool];
+}
+let toolResultEl = null;
+function getToolResult(){ 
+  // Always get fresh element — cached version may have stale id
+  return document.getElementById('tool-result');
+}
+
+let resultOnlyTimer = null;
+let isTyping = false;
+let typingTimer = null;
+
+function updateField(tool, field, value){
+  if(!currentData[tool]) currentData[tool] = {};
+  currentData[tool][field] = value;
+  scheduleSave();
+
+  // Mark as actively typing — results won't update until typing pauses
+  isTyping = true;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => {
+    isTyping = false;
+    // Update results now that typing has paused
+    const el = getToolResult();
+    if (!el) return;
+    if (worker) {
+      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
+        .then(({ result }) => {
+          if (result !== undefined && !isTyping) renderResultFromWorker(result);
+        });
+    } else {
+      renderResultOnly();
+    }
+  }, 600);
+}
+function updateToolRaw(tool, value){
+  currentData[tool] = value;
+  scheduleSave();
+  toolResultEl = null; // reset cache since full re-render replaces the element
+  renderTool();
+}
+function renderResultFromWorker(result){
+  const el = getToolResult();
+  if (!el || result === null) { if(el) el.innerHTML = ''; return; }
+    const { status, headline, story, action } = result;
+    el.innerHTML = `<div class="result"><span class="pill ${status}">${status==='good'?'Aligned':'Gap Detected'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>
+      <div class="card"><h3>This week's one move</h3><p class="card-sub">${action}</p></div>`;
+  }
+  else if (activeTab === 'lag') {
+    const { status, headline, story, lagDays } = result;
+    el.innerHTML = `<div class="result"><span class="pill ${status}">${lagDays<=0?'Healthy Gap':lagDays>20?'Danger Window':'Gap to Watch'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>`;
+  }
+  else if (activeTab === 'pnl') {
+    const { status, label, grossProfit, grossMargin, netProfit, netMargin, story } = result;
+    el.innerHTML = `<div class="result">
+      <div class="grid3" style="margin-bottom:6px;">
+        <div><div class="note">Gross Profit</div><div class="big" style="font-size:22px;">${fmt(grossProfit)}</div></div>
+        <div><div class="note">Gross Margin</div><div class="big" style="font-size:22px;">${grossMargin.toFixed(1)}%</div></div>
+        <div><div class="note">Net Profit</div><div class="big" style="font-size:22px;">${fmt(netProfit)}</div></div>
+      </div>
+      <span class="pill ${status}">${label} — ${netMargin.toFixed(1)}% net margin</span>
+      <p class="story" style="margin-top:14px;">${story}</p>
+    </div>`;
+  }
+  else if (activeTab === 'breakeven') {
+    const { headline, story } = result;
+    el.innerHTML = `<div class="result"><div class="big">${headline}</div><p class="story">${story}</p></div>`;
+  }
+  else if (activeTab === 'snapshot') {
+    const { net, cash, owed, name, period, revenue, expenses } = result;
+    el.innerHTML = `<div style="margin-top:22px;padding:22px 24px;border-radius:12px;background:var(--navy);color:#fff;">
+      <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:#9aa9bb;font-weight:700;">${escapeHtml(name)}</div>
+      <div style="font-size:14px;color:#cdd7e3;margin-bottom:18px;">${escapeHtml(period||'')}</div>
+      <div class="grid3">
+        <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Net Position</div><div class="big" style="color:#fff;">${fmt(net)}</div></div>
+        <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Cash on Hand</div><div class="big" style="color:#fff;">${fmt(cash)}</div></div>
+        <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Outstanding</div><div class="big" style="color:#fff;">${fmt(owed)}</div></div>
+      </div>
+      <p style="color:#cdd7e3;font-size:14px;margin-top:16px;">${escapeHtml(name)} brought in ${fmt(revenue)} and spent ${fmt(expenses)}, for a net position of ${fmt(net)}. Total available once collections come in: ${fmt(cash+owed)}.</p>
+    </div>`;
+  }
+  else if (activeTab === 'forecast') {
+    const { balances, firstNeg, story, startCash } = result;
+    const months = ['Month 1','Month 2','Month 3'];
+    const maxVal = Math.max(startCash, ...balances.map(b=>Math.abs(b)), 1);
+    el.innerHTML = `<div class="result">
+      <h3 style="margin-top:0;">Cash on hand, month by month</h3>
+      ${months.map((m,i)=>{
+        const bal=balances[i], pct=Math.min(Math.abs(bal)/maxVal*100,100);
+        const color=bal<0?'var(--rust)':(bal<startCash*0.5?'var(--amber)':'var(--sage)');
+        return `<div class="forecast-row"><div class="forecast-label">${m}</div><div class="forecast-track"><div class="forecast-fill" style="width:${pct}%;background:${color};">${fmt(bal)}</div></div></div>`;
+      }).join('')}
+      <p class="story" style="margin-top:18px;">${story}</p>
+    </div>`;
+  }
+}
+
+function renderResultOnly(){
+  const resultFns = {
+    truth: resultTruth, lag: resultLag, pnl: resultPNL, breakeven: resultBreakeven,
+    snapshot: resultSnapshot, forecast: resultForecast,
+  };
+  const fn = resultFns[activeTab];
+  const el = getToolResult();
+  if(fn && el) el.innerHTML = fn();
+}
+
+// ---------- NAV ----------
+function renderNav(){
+  const container = document.getElementById('nav-container');
+  container.innerHTML = GROUPS.map(group => `
+    <div class="nav-section">
+      <div class="nav-label">${group}</div>
+      ${TOOLS.filter(t=>t.group===group).map(t=>`
+        <button class="nav-item ${activeTab===t.id?'active':''}" onclick="goTo('${t.id}')">
+          <span class="num">${t.n}</span> ${t.label}
+        </button>
+      `).join('')}
+    </div>
+  `).join('');
+}
+function goTo(id){
+  // Save immediately when switching tools — don't rely on the 2-second debounce
+  if(saveTimer){ clearTimeout(saveTimer); saveTimer = null; }
+  apiFetch('/api/data', {
+    method:'PUT',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({data: currentData})
+  }).catch(()=>{});
+  activeTab = id;
+  renderNav();
+  renderTool();
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+// ---------- TOOL RENDERING ----------
+function renderTool(){
+  const c = document.getElementById('tool-container');
+  if(activeTab==='truth') return renderTruth(c);
+  if(activeTab==='lag') return renderLag(c);
+  if(activeTab==='quiz') return renderQuiz(c);
+  if(activeTab==='pnl') return renderPNL(c);
+  if(activeTab==='breakeven') return renderBreakeven(c);
+  if(activeTab==='tracker') return renderTracker(c);
+  if(activeTab==='snapshot') return renderSnapshot(c);
+  if(activeTab==='forecast') return renderForecast(c);
+  if(activeTab==='engine') return renderEngine(c);
+}
+
+function topline(eyebrow, title, sub){
+  return `<div class="topline">
+    <div class="eyebrow">${eyebrow}</div>
+    <h2>${title}</h2>
+    <p class="sub">${sub}</p>
+  </div>`;
+}
+
+// TOOL 1: TRUTH CHECK
+function resultTruth(){
+  const d = getToolData('truth', {revenue:'',expenses:'',ar:'',ap:'',bank:''});
+  const revenue=Number(d.revenue)||0, expenses=Number(d.expenses)||0, ar=Number(d.ar)||0, ap=Number(d.ap)||0, bank=Number(d.bank)||0;
+  const hasInput = d.revenue!=='' && d.expenses!=='' && d.bank!=='';
+  if(!hasInput) return '';
+  const paperProfit = revenue-expenses;
+  const realCash = bank-ap;
+  const gap = paperProfit-realCash;
+  let status,headline,story,action;
+  if(Math.abs(gap) < Math.max(revenue*0.05,200)){
+    status='good'; headline='Your books and your bank account agree.';
+    story=`You made ${fmt(paperProfit)} on paper, and your real cash position is close to that. This is a healthy sign — your numbers can be trusted.`;
+    action='Nothing urgent here. Keep doing your weekly cash check so it stays this way.';
+  } else if(gap>0){
+    status='watch'; headline=`You made ${fmt(paperProfit)} on paper, but only ${fmt(realCash)} is actually available.`;
+    const rc = ar>ap ? 'slow-paying customers' : 'spending ahead of incoming cash';
+    story=`That ${fmt(gap)} gap usually comes down to one thing: ${rc}. You're not imagining the stress — the numbers show exactly why you feel behind even though the business "made money."`;
+    action = ar>ap ? `Your biggest lever right now is collecting what's owed to you. You have ${fmt(ar)} in unpaid invoices — send reminders on the oldest 3 today.` : `You're spending faster than cash is arriving. Hold off on one non-essential purchase this week and re-check this number in 7 days.`;
+  } else {
+    status='good'; headline='Your real cash position is actually stronger than your paper profit shows.';
+    story='This can happen when you\'ve collected on old invoices or front-loaded customer payments. Good news — just don\'t mistake this for a permanent pattern.';
+    action='Use this cash cushion wisely — it may not repeat next month.';
+  }
+  return `<div class="result"><span class="pill ${status}">${status==='good'?'Aligned':'Gap Detected'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>
+    <div class="card"><h3>This week's one move</h3><p class="card-sub">${action}</p></div>`;
+}
+function renderTruth(c){
+  const d = getToolData('truth', {revenue:'',expenses:'',ar:'',ap:'',bank:''});
+  c.innerHTML = topline('Tool 1 of 8 · 10 minutes','The Cash Truth Check','Your books say one thing. Your bank account says another. Let\'s see the real gap between them — and what\'s actually going on.') + `
+    <div class="card">
+      <h3>Five numbers. That's it.</h3>
+      <p class="card-sub">Pull these from your bank app or accounting software — no formulas, no formatting.</p>
+      <div class="grid2">
+        ${field('Revenue this month','truth','revenue',d.revenue)}
+        ${field('Total expenses this month','truth','expenses',d.expenses)}
+        ${field('Accounts receivable (owed to you)','truth','ar',d.ar)}
+        ${field('Accounts payable (you owe)','truth','ap',d.ap)}
+      </div>
+      ${field('Current bank balance','truth','bank',d.bank)}
+    </div>
+    <div id="tool-result">${resultTruth()}</div>
+  `;
+}
+
+// TOOL 2: LAG CALCULATOR
+function resultLag(){
+  const d = getToolData('lag', {customerDays:'',supplierDays:'',payroll:'',cash:''});
+  const customerDays=Number(d.customerDays)||0, supplierDays=Number(d.supplierDays)||0, payroll=Number(d.payroll)||0, cash=Number(d.cash)||0;
+  const hasInput = d.customerDays!=='' && d.supplierDays!=='';
+  if(!hasInput) return '';
+  const lagDays = customerDays-supplierDays;
+  const dailyBurn = payroll/30;
+  const runway = dailyBurn>0 ? Math.round(cash/dailyBurn) : 999;
+  let status,headline,story;
+  if(lagDays<=0){
+    status='good'; headline='You\'re paid before you have to pay others. That\'s rare — protect it.';
+    story=`Customers pay you in ${customerDays} days on average, faster than your ${supplierDays}-day supplier terms. Your cash position is structurally strong.`;
+  } else {
+    status = lagDays>20?'bad':'watch';
+    headline = `There's a ${lagDays}-day gap between paying out and getting paid.`;
+    story = `You pay suppliers in ${supplierDays} days, but customers take ${customerDays} days to pay you. With ${fmt(payroll)}/month in fixed costs, your current cash covers roughly ${runway} days if income stopped today. The fix isn't to panic — it's to either speed up customer payments or negotiate longer supplier terms to close this gap.`;
+  }
+  return `<div class="result"><span class="pill ${status}">${lagDays<=0?'Healthy Gap':lagDays>20?'Danger Window':'Gap to Watch'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>`;
+}
+function renderLag(c){
+  const d = getToolData('lag', {customerDays:'',supplierDays:'',payroll:'',cash:''});
+  c.innerHTML = topline('Tool 2 of 8 · 15 minutes','The Cash Lag Calculator','There\'s a gap between when you pay people and when people pay you. Let\'s find your danger window before it finds you.') + `
+    <div class="card">
+      <h3>How fast does money move?</h3>
+      <p class="card-sub">Rough numbers are fine — this is about spotting the gap, not perfect accounting.</p>
+      <div class="grid2">
+        ${field('Average days customers take to pay you','lag','customerDays',d.customerDays,'e.g. 30')}
+        ${field('Average days you take to pay suppliers','lag','supplierDays',d.supplierDays,'e.g. 15')}
+        ${field('Monthly payroll / fixed costs','lag','payroll',d.payroll)}
+        ${field('Cash currently on hand','lag','cash',d.cash)}
+      </div>
+      <div id="tool-result">${resultLag()}</div>
+    </div>
+  `;
+}
+
+// TOOL 3: QUIZ
+const quizQuestions = [
+  "I know my exact bank balance right now without checking",
+  "I could make payroll today if I had to",
+  "I understand the difference between profit and cash flow",
+  "I review my finances at least weekly",
+  "I'd notice immediately if a client payment was late",
+  "My business and personal expenses are fully separated",
+  "I know my break-even number off the top of my head",
+  "I feel confident, not anxious, opening my accounting software",
+  "I have at least one month of expenses saved as a buffer",
+  "I could explain my financial position clearly to a stranger",
+];
+function renderQuiz(c){
+  const d = getToolData('quiz', {answers: new Array(10).fill(null)});
+  const answers = d.answers;
+  const answered = answers.filter(a=>a!==null).length;
+  const allAnswered = answered===quizQuestions.length;
+  const score = allAnswered ? answers.reduce((a,b)=>a+b,0) : null;
+  let status,headline,story;
+  if(score!==null){
+    if(score>=8){ status='good'; headline=`${score}/10 — You're more in control than you give yourself credit for.`; story='Your financial habits are genuinely strong. The other tools in this console will sharpen what\'s already working.'; }
+    else if(score>=4){ status='watch'; headline=`${score}/10 — You're not flying blind, but you're not fully in control either.`; story='This is the most common score for business owners who feel "fine most days but anxious some days." Start with the Cash Truth Check and the Break-Even Reveal.'; }
+    else { status='bad'; headline=`${score}/10 — You're making decisions without the information you need.`; story='This isn\'t a verdict on you — most business owners start exactly here. Begin with Tool 1.'; }
+  }
+  c.innerHTML = topline('Tool 3 of 8 · 5 minutes','Am I Actually Okay?','Ten quick questions. One honest read on where your business stands financially right now.') + `
+    <div class="card">
+      <h3>Answer honestly — no one's grading you</h3>
+      ${quizQuestions.map((q,i)=>`
+        <div class="quiz-q">
+          <div style="font-size:15px;font-weight:600;margin-bottom:10px;">${i+1}. ${q}</div>
+          <div class="quiz-opts">
+            <div class="quiz-opt ${answers[i]===1?'selected':''}" onclick="selectQuiz(${i},1)">True</div>
+            <div class="quiz-opt ${answers[i]===0?'selected':''}" onclick="selectQuiz(${i},0)">Not yet</div>
+          </div>
+        </div>
+      `).join('')}
+      ${!allAnswered ? `<p class="note">${quizQuestions.length-answered} question${quizQuestions.length-answered!==1?'s':''} left to go.</p>` : ''}
+      ${score!==null ? `<div class="result"><span class="pill ${status}">${score>=8?'Solid Ground':score>=4?'Mixed Signals':'Flying Blind'}</span><div class="big">${headline}</div><p class="story">${story}</p></div>` : ''}
+    </div>
+  `;
+}
+function selectQuiz(i,val){
+  const d = getToolData('quiz', {answers: new Array(10).fill(null)});
+  d.answers[i] = val;
+  updateToolRaw('quiz', d);
+}
+
+// TOOL 4: P&L
+function resultPNL(){
+  const d = getToolData('pnl', {revenue:'',cogs:'',opex:''});
+  const revenue=Number(d.revenue)||0, cogs=Number(d.cogs)||0, opex=Number(d.opex)||0;
+  const hasInput = d.revenue!=='';
+  if(!hasInput) return '';
+  const grossProfit = revenue-cogs;
+  const grossMargin = revenue>0 ? (grossProfit/revenue*100) : 0;
+  const netProfit = grossProfit-opex;
+  const netMargin = revenue>0 ? (netProfit/revenue*100) : 0;
+  let status,label;
+  if(netMargin>=10){status='good';label='Healthy';} else if(netMargin>=0){status='watch';label='Watch';} else {status='bad';label='Concerning';}
+  const story = `You brought in ${fmt(revenue)}. After ${fmt(cogs)} in direct costs, you kept ${fmt(grossProfit)} (a ${grossMargin.toFixed(1)}% gross margin). After ${fmt(opex)} in operating expenses, you're left with ${fmt(netProfit)} in net profit — a ${netMargin.toFixed(1)}% net margin. ` +
+    (netMargin>=10 ? 'This is a strong margin for most small businesses.' : netMargin>=0 ? 'You\'re profitable, but thin — worth watching closely.' : 'Your operating expenses are outpacing your gross profit. This is the gap to address first.');
+  return `<div class="result">
+    <div class="grid3" style="margin-bottom:6px;">
+      <div><div class="note">Gross Profit</div><div class="big" style="font-size:22px;">${fmt(grossProfit)}</div></div>
+      <div><div class="note">Gross Margin</div><div class="big" style="font-size:22px;">${grossMargin.toFixed(1)}%</div></div>
+      <div><div class="note">Net Profit</div><div class="big" style="font-size:22px;">${fmt(netProfit)}</div></div>
+    </div>
+    <span class="pill ${status}">${label} — ${netMargin.toFixed(1)}% net margin</span>
+    <p class="story" style="margin-top:14px;">${story}</p>
+  </div>`;
+}
+function renderPNL(c){
+  const d = getToolData('pnl', {revenue:'',cogs:'',opex:''});
+  c.innerHTML = topline('Tool 4 of 8 · 20 minutes','Read Your P&L Like a Pro','Plug in your real numbers. Get a plain-English translation of what your profit & loss statement is actually telling you.') + `
+    <div class="card">
+      <h3>Your numbers</h3>
+      <p class="card-sub">Use this month or last month. Not sure? Click "Use sample numbers" first.</p>
+      <div class="grid3">
+        ${field('Revenue','pnl','revenue',d.revenue)}
+        ${field('Cost of goods sold','pnl','cogs',d.cogs)}
+        ${field('Operating expenses','pnl','opex',d.opex)}
+      </div>
+      <button class="btn secondary" onclick="loadSamplePNL()" style="margin-bottom:14px;">Use sample numbers</button>
+      <div id="tool-result">${resultPNL()}</div>
+    </div>
+  `;
+}
+function loadSamplePNL(){
+  const d = getToolData('pnl', {revenue:'',cogs:'',opex:''});
+  d.revenue='42000'; d.cogs='18000'; d.opex='19500';
+  updateToolRaw('pnl', d);
+}
+
+// TOOL 5: BREAK-EVEN
+function resultBreakeven(){
+  const d = getToolData('breakeven', {fixed:'',price:'',cost:''});
+  const fixed=Number(d.fixed)||0, price=Number(d.price)||0, cost=Number(d.cost)||0;
+  const hasInput = d.fixed!=='' && d.price!=='';
+  if(!hasInput) return '';
+  const margin = price-cost;
+  let headline,story;
+  if(margin<=0){
+    headline='Your cost per unit is the same or higher than your price.';
+    story='Right now, every sale either breaks even or loses money before fixed costs are even covered. Check your pricing or cost per unit first.';
+  } else {
+    const units = Math.ceil(fixed/margin);
+    const rev = units*price;
+    headline = `You need ${units.toLocaleString()} sales (${fmt(rev)} in revenue) to break even each month.`;
+    story = `Each sale earns you ${fmt(margin)} after direct costs. With ${fmt(fixed)} in fixed costs to cover, that's the number you need before you're making real profit.`;
+  }
+  return `<div class="result"><div class="big">${headline}</div><p class="story">${story}</p></div>`;
+}
+function renderBreakeven(c){
+  const d = getToolData('breakeven', {fixed:'',price:'',cost:''});
+  c.innerHTML = topline('Tool 5 of 8 · 15 minutes','The Break-Even Reveal','The exact number you need to hit each month just to stop losing money.') + `
+    <div class="card">
+      <h3>Your costs</h3>
+      <div class="grid3">
+        ${field('Fixed monthly costs','breakeven','fixed',d.fixed)}
+        ${field('Average price per sale/unit','breakeven','price',d.price)}
+        ${field('Average cost per sale/unit','breakeven','cost',d.cost)}
+      </div>
+      <div id="tool-result">${resultBreakeven()}</div>
+    </div>
+  `;
+}
+
+// TOOL 6: TRACKER
+const trackerCategories = ['Payroll','Supplies','Subscriptions','Marketing','Rent/Utilities','Travel','Professional Services','Other'];
+function renderTracker(c){
+  const d = getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
+  const rows = d.rows;
+  const totals = {};
+  let grand = 0;
+  rows.forEach(r=>{ const amt=Number(r.amt)||0; if(amt<=0) return; totals[r.cat]=(totals[r.cat]||0)+amt; grand+=amt; });
+  const sorted = Object.entries(totals).sort((a,b)=>b[1]-a[1]);
+  c.innerHTML = topline('Tool 6 of 8 · 30 minutes','Where Did My Money Go?','Add last month\'s spending below. We\'ll show you where it actually went.') + `
+    <div class="card">
+      <h3>Your transactions</h3>
+      <p class="card-sub">Add each expense with an amount and a category.</p>
+      <div id="tracker-rows">
+        ${rows.map((row,i)=>`
+          <div class="trow">
+            <input type="text" value="${escapeHtml(row.name)}" placeholder="What was it?" oninput="updateTrackerRow(${i},'name',this.value)">
+            <input type="text" inputmode="decimal" autocomplete="off" value="${escapeHtml(row.amt)}" placeholder="$0" oninput="updateTrackerRow(${i},'amt',this.value)">
+            <select onchange="updateTrackerRow(${i},'cat',this.value)">
+              ${trackerCategories.map(cat=>`<option value="${cat}" ${row.cat===cat?'selected':''}>${cat}</option>`).join('')}
+            </select>
+            <button class="remove-btn" onclick="removeTrackerRow(${i})">×</button>
+          </div>
+        `).join('')}
+      </div>
+      <button class="add-row-btn" onclick="addTrackerRow()">+ Add another expense</button>
+      ${grand>0 ? `<div class="result">
+        <h3 style="margin-top:0;">Your top spending categories</h3>
+        <table><thead><tr><th>Category</th><th>Total</th><th>% of spend</th></tr></thead>
+        <tbody>${sorted.map(([cat,amt])=>`<tr><td>${cat}</td><td>${fmt(amt)}</td><td>${(amt/grand*100).toFixed(0)}%</td></tr>`).join('')}</tbody></table>
+        <p class="story" style="margin-top:16px;">You spent ${fmt(grand)} total. ${sorted[0][0]} was your single biggest category at ${fmt(sorted[0][1])} (${(sorted[0][1]/grand*100).toFixed(0)}%).</p>
+      </div>` : ''}
+    </div>
+  `;
+}
+function updateTrackerRow(i,field,val){
+  const d = getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
+  d.rows[i][field]=val;
+  updateToolRaw('tracker', d);
+}
+function addTrackerRow(){
+  const d = getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
+  d.rows.push({name:'',amt:'',cat:'Payroll'});
+  updateToolRaw('tracker', d);
+}
+function removeTrackerRow(i){
+  const d = getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
+  d.rows.splice(i,1);
+  updateToolRaw('tracker', d);
+}
+
+// TOOL 7: SNAPSHOT
+function resultSnapshot(){
+  const d = getToolData('snapshot', {name:'',period:'',revenue:'',expenses:'',cash:'',owed:''});
+  const revenue=Number(d.revenue)||0, expenses=Number(d.expenses)||0, cash=Number(d.cash)||0, owed=Number(d.owed)||0;
+  const hasInput = d.revenue!=='' && d.name!=='';
+  if(!hasInput) return '';
+  const net = revenue-expenses;
+  return `<div style="margin-top:22px;padding:22px 24px;border-radius:12px;background:var(--navy);color:#fff;">
+    <div style="font-size:13px;text-transform:uppercase;letter-spacing:0.06em;color:#9aa9bb;font-weight:700;">${escapeHtml(d.name)}</div>
+    <div style="font-size:14px;color:#cdd7e3;margin-bottom:18px;">${escapeHtml(d.period)}</div>
+    <div class="grid3">
+      <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Net Position</div><div class="big" style="color:#fff;">${fmt(net)}</div></div>
+      <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Cash on Hand</div><div class="big" style="color:#fff;">${fmt(cash)}</div></div>
+      <div><div style="font-size:11.5px;color:#9aa9bb;text-transform:uppercase;font-weight:700;">Outstanding</div><div class="big" style="color:#fff;">${fmt(owed)}</div></div>
+    </div>
+    <p style="color:#cdd7e3;font-size:14px;margin-top:16px;">${escapeHtml(d.name)} brought in ${fmt(revenue)} and spent ${fmt(expenses)}, for a net position of ${fmt(net)}. With ${fmt(cash)} in the bank and ${fmt(owed)} owed by customers, total available cash once collections come in would be ${fmt(cash+owed)}.</p>
+  </div>`;
+}
+function renderSnapshot(c){
+  const d = getToolData('snapshot', {name:'',period:'',revenue:'',expenses:'',cash:'',owed:''});
+  c.innerHTML = topline('Tool 7 of 8 · 10 minutes','The 1-Page Profit Snapshot','One clean summary you could screenshot and send to a partner, spouse, or banker right now.') + `
+    <div class="card">
+      <h3>Build your snapshot</h3>
+      <div class="grid2">
+        ${field('Business name','snapshot','name',d.name,'Your business','text')}
+        ${field('Period','snapshot','period',d.period,'This month','text')}
+        ${field('Total revenue','snapshot','revenue',d.revenue)}
+        ${field('Total expenses','snapshot','expenses',d.expenses)}
+        ${field('Cash in bank right now','snapshot','cash',d.cash)}
+        ${field('Outstanding invoices (owed to you)','snapshot','owed',d.owed)}
+      </div>
+      <div id="tool-result">${resultSnapshot()}</div>
+    </div>
+  `;
+}
+
+// TOOL 8: FORECASTER
+function resultForecast(){
+  const d = getToolData('forecast', {cash:'',income:'',expenses:''});
+  const cash=Number(d.cash)||0, income=Number(d.income)||0, expenses=Number(d.expenses)||0;
+  const hasInput = d.cash!=='' && d.income!=='';
+  if(!hasInput) return '';
+  const net = income-expenses;
+  const months = ['Month 1','Month 2','Month 3'];
+  const balances = [cash+net, cash+net*2, cash+net*3];
+  const maxVal = Math.max(cash, ...balances.map(b=>Math.abs(b)), 1);
+  const firstNeg = balances.findIndex(b=>b<0);
+  const story = firstNeg===-1
+    ? `At this pace, your cash position stays positive through all 90 days, ending around ${fmt(balances[2])}.`
+    : `At this pace, your cash position turns negative in ${months[firstNeg]} — around ${fmt(balances[firstNeg])}. That's your pressure point — you have time to act.`;
+  return `<div class="result">
+    <h3 style="margin-top:0;">Cash on hand, month by month</h3>
+    ${months.map((m,i)=>{
+      const bal=balances[i]; const pct=Math.min(Math.abs(bal)/maxVal*100,100);
+      const color = bal<0?'var(--rust)':(bal<cash*0.5?'var(--amber)':'var(--sage)');
+      return `<div class="forecast-row"><div class="forecast-label">${m}</div><div class="forecast-track"><div class="forecast-fill" style="width:${pct}%;background:${color};">${fmt(bal)}</div></div></div>`;
+    }).join('')}
+    <p class="story" style="margin-top:18px;">${story}</p>
+  </div>`;
+}
+function renderForecast(c){
+  const d = getToolData('forecast', {cash:'',income:'',expenses:''});
+  c.innerHTML = topline('Tool 8 of 8 · 25 minutes','The 90-Day Cash Crunch Forecaster','See the next three months of cash before they happen.') + `
+    <div class="card">
+      <h3>Your starting point</h3>
+      <div class="grid3">
+        ${field('Cash on hand today','forecast','cash',d.cash)}
+        ${field('Expected income / month','forecast','income',d.income)}
+        ${field('Expected expenses / month','forecast','expenses',d.expenses)}
+      </div>
+      <p class="note">Tip: if income or expenses vary, use your 3-month average.</p>
+      <div id="tool-result">${resultForecast()}</div>
+    </div>
+  `;
+}
+
+// TOOL 9: THE FORECASTING ENGINE
+function getEngineData(){
+  return getToolData('engine', {
+    periodType: 'monthly',
+    forecastHorizon: 6,
+    periods: [],
+  });
+}
+
+function emptyPeriod(){
+  return {
+    label: '',
+    income: { revenue:'', cogs:'', opex:'' },
+    balance: { cash:'', otherAssets:'', totalLiabilities:'', equity:'' },
+    cashflow: { operatingCash:'', investingCash:'', financingCash:'' },
+  };
+}
+
+function renderEngine(c){
+  const d = getEngineData();
+  c.innerHTML = `<div class="engine">
+    <div class="eng-eyebrow">Advanced Module · Multi-Period Analysis</div>
+    <h2 class="eng-headline eng-title">The Forecasting Engine</h2>
+    <p class="eng-sub">Enter your historical Income Statement, Balance Sheet, and Cash Flow Statement data. The engine analyzes real trends across all three and generates a clear, plain-English picture of where your business is actually headed — the kind of synthesis an accountant would normally have to walk you through.</p>
+
+    <div class="eng-panel" style="margin-top:24px;">
+      <h3>Forecast Settings</h3>
+      <div class="eng-grid3">
+        <div class="eng-field">
+          <label>Reporting Period</label>
+          <select onchange="updateEnginePeriodType(this.value)">
+            <option value="monthly" ${d.periodType==='monthly'?'selected':''}>Monthly</option>
+            <option value="quarterly" ${d.periodType==='quarterly'?'selected':''}>Quarterly</option>
+          </select>
+        </div>
+        <div class="eng-field">
+          <label>Forecast Horizon</label>
+          <select onchange="updateEngineHorizon(this.value)">
+            <option value="3" ${d.forecastHorizon==3?'selected':''}>3 ${d.periodType==='monthly'?'months':'quarters'} ahead</option>
+            <option value="6" ${d.forecastHorizon==6?'selected':''}>6 ${d.periodType==='monthly'?'months':'quarters'} ahead</option>
+            <option value="12" ${d.forecastHorizon==12?'selected':''}>12 ${d.periodType==='monthly'?'months':'quarters'} ahead</option>
+          </select>
+        </div>
+        <div class="eng-field">
+          <label>Historical Periods Entered</label>
+          <div style="padding:10px 12px; font-size:14px;">${d.periods.length} of 12 max <span style="color:var(--eng-text-soft);">(3 minimum to forecast)</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="eng-section-label">Historical Periods</div>
+    <div id="eng-periods">${renderEnginePeriods(d)}</div>
+    <button class="eng-btn secondary" onclick="addEnginePeriod()" ${d.periods.length>=12?'disabled':''} style="margin-bottom:24px;">+ Add Historical Period</button>
+
+    <div id="eng-results">${renderEngineResults(d)}</div>
+  </div>`;
+
+  // Wire up ONE delegated listener on the periods container — fires for all inputs
+  // inside it without ever re-attaching as inputs are added/removed.
+  // This replaces all inline oninput handlers and is far smoother.
+  const periodsContainer = c.querySelector('#eng-periods');
+  if(periodsContainer){
+    periodsContainer.addEventListener('input', handleEngineInput);
+    // Update engine results immediately on Enter
+    periodsContainer.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      const input = e.target;
+      if (!input.classList.contains('eng-input')) return;
+      e.preventDefault();
+      const d = getEngineData();
+      const resultsEl = document.getElementById('eng-results');
+      if (resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+    });
+  }
+}
+
+function renderEnginePeriods(d){
+  if(d.periods.length === 0){
+    return `<div class="eng-empty-state">No periods entered yet. Click "Add Historical Period" below to begin — you'll need at least 3 periods of data for the engine to generate a reliable forecast.</div>`;
+  }
+  return d.periods.map((p,i)=>`
+    <div class="eng-period-card">
+      <div class="eng-period-header">
+        <input type="text" autocomplete="off" spellcheck="false" value="${escapeHtml(p.label)}" placeholder="Period label (e.g. Jan 2026)"
+          data-period="${i}" data-statement="label" data-key="label" class="eng-input"
+          style="max-width:240px; font-weight:700; color:var(--eng-brass);">
+        <button class="eng-btn danger" onclick="removeEnginePeriod(${i})">Remove</button>
+      </div>
+
+      <div class="eng-section-label" style="margin-top:0;">Income Statement</div>
+      <div class="eng-grid3">
+        ${engineField('Revenue', i, 'income', 'revenue', p.income.revenue)}
+        ${engineField('Cost of Goods Sold', i, 'income', 'cogs', p.income.cogs)}
+        ${engineField('Operating Expenses', i, 'income', 'opex', p.income.opex)}
+      </div>
+
+      <div class="eng-section-label">Balance Sheet</div>
+      <div class="eng-grid4">
+        ${engineField('Cash', i, 'balance', 'cash', p.balance.cash)}
+        ${engineField('Other Assets', i, 'balance', 'otherAssets', p.balance.otherAssets)}
+        ${engineField('Total Liabilities', i, 'balance', 'totalLiabilities', p.balance.totalLiabilities)}
+        ${engineField('Equity', i, 'balance', 'equity', p.balance.equity)}
+      </div>
+
+      <div class="eng-section-label">Cash Flow Statement</div>
+      <div class="eng-grid3">
+        ${engineField('Operating Cash Flow', i, 'cashflow', 'operatingCash', p.cashflow.operatingCash)}
+        ${engineField('Investing Cash Flow', i, 'cashflow', 'investingCash', p.cashflow.investingCash)}
+        ${engineField('Financing Cash Flow', i, 'cashflow', 'financingCash', p.cashflow.financingCash)}
+      </div>
+    </div>
+  `).join('');
+}
+
+function engineField(label, periodIndex, statement, key, value){
+  return `<div class="eng-field">
+    <label>${label}</label>
+    <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
+      value="${escapeHtml(value)}" placeholder=""
+      data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input" dir="ltr">
+  </div>`;
+}
+
+function updateEnginePeriodType(val){
+  const d = getEngineData();
+  d.periodType = val;
+  updateToolRaw('engine', d);
+}
+function updateEngineHorizon(val){
+  const d = getEngineData();
+  d.forecastHorizon = Number(val);
+  updateToolRaw('engine', d);
+}
+function addEnginePeriod(){
+  const d = getEngineData();
+  if(d.periods.length >= 12) return;
+  d.periods.push(emptyPeriod());
+  updateToolRaw('engine', d);
+}
+function removeEnginePeriod(i){
+  const d = getEngineData();
+  d.periods.splice(i,1);
+  updateToolRaw('engine', d);
+}
+function updateEnginePeriodLabel(i, val){
+  const d = getEngineData();
+  d.periods[i].label = val;
+  scheduleSave();
+  // label changes don't affect calculations, safe to skip full re-render
+}
+// Delegated input handler for all engine inputs — called from a single
+// event listener on #eng-periods, never re-attached on keystroke.
+function handleEngineInput(e){
+  const input = e.target;
+  if(!input.classList.contains('eng-input')) return;
+
+  const periodIndex = Number(input.dataset.period);
+  const statement = input.dataset.statement;
+  const key = input.dataset.key;
+  const val = input.value;
+
+  const d = getEngineData();
+
+  if(statement === 'label'){
+    d.periods[periodIndex].label = val;
+  } else {
+    d.periods[periodIndex][statement][key] = val;
+  }
+
+  currentData.engine = d;
+  scheduleSave();
+
+  // Debounce, then offload forecast to worker
+  clearTimeout(engineResultTimer);
+  engineResultTimer = setTimeout(() => {
+    const resultsEl = document.getElementById('eng-results');
+    if (!resultsEl) return;
+
+    // Quick check — not enough periods yet, update inline (cheap, no worker needed)
+    if (d.periods.length < 3) {
+      const needed = 3 - d.periods.length;
+      resultsEl.innerHTML = `<div class="eng-panel eng-panel-raised"><div class="eng-empty-state">Add ${needed} more period${needed!==1?'s':''} to generate your forecast.</div></div>`;
+      return;
+    }
+
+    // Has enough periods — build the forecast payload and send to worker
+    const incomplete = d.periods.some(p =>
+      p.income.revenue==='' || p.income.cogs==='' || p.income.opex==='' ||
+      p.balance.cash==='' || p.balance.otherAssets==='' || p.balance.totalLiabilities==='' || p.balance.equity==='' ||
+      p.cashflow.operatingCash==='' || p.cashflow.investingCash==='' || p.cashflow.financingCash===''
+    );
+    if (incomplete) {
+      resultsEl.innerHTML = `<div class="eng-panel eng-panel-raised"><div class="eng-empty-state">Fill in every field for each period to generate your forecast.</div></div>`;
+      return;
+    }
+
+    if (worker) {
+      workerRun('COMPUTE_FORECAST', {
+        periodType: d.periodType,
+        periodsAhead: d.forecastHorizon,
+        incomeStatement: d.periods.map(p => ({ revenue: Number(p.income.revenue), cogs: Number(p.income.cogs), opex: Number(p.income.opex) })),
+        balanceSheet: d.periods.map(p => ({ cash: Number(p.balance.cash), otherAssets: Number(p.balance.otherAssets), totalLiabilities: Number(p.balance.totalLiabilities), equity: Number(p.balance.equity) })),
+        cashFlow: d.periods.map(p => ({ operatingCash: Number(p.cashflow.operatingCash), investingCash: Number(p.cashflow.investingCash), financingCash: Number(p.cashflow.financingCash) })),
+      }).then(({ result }) => {
+        if (result) {
+          const el = document.getElementById('eng-results');
+          if (el) el.innerHTML = renderEngineForecastHTML(result, d);
+        }
+      });
+    } else {
+      resultsEl.innerHTML = renderEngineResults(d);
+    }
+  }, 400);
+}
+
+let engineResultTimer = null;
+function updateEngineField(periodIndex, statement, key, val){
+  const d = getEngineData();
+  d.periods[periodIndex][statement][key] = val;
+  currentData.engine = d;
+  scheduleSave();
+  clearTimeout(engineResultTimer);
+  engineResultTimer = setTimeout(() => {
+    const resultsEl = document.getElementById('eng-results');
+    if(resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+  }, 400);
+}
+
+// Renders forecast HTML from a pre-computed result (returned by the worker)
+function renderEngineForecastHTML(result, d) {
+  const unit = d.periodType==='monthly' ? 'Month' : 'Quarter';
+  const futureLabels = Array.from({length: d.forecastHorizon}, (_,i) => `${unit} +${i+1}`);
+  return `
+    <div class="eng-narrative">${result.narrative}</div>
+    <div class="eng-panel" style="margin-top:20px;">
+      <h3>Key Flags</h3>
+      ${result.flags.map(f => `
+        <div style="margin-bottom:12px;padding-bottom:12px;border-bottom:1px solid var(--eng-line);">
+          <span class="eng-pill ${f.severity}">${f.severity}</span>
+          <p style="margin:8px 0 0;font-family:'Inter',sans-serif;font-size:13.5px;color:var(--eng-text-soft);line-height:1.6;">${escapeHtml(f.message)}</p>
+        </div>
+      `).join('')}
+    </div>
+    <div class="eng-panel">
+      <h3>Income Statement — Projected</h3>
+      <table>
+        <thead><tr><th>Line Item</th>${futureLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><td>Revenue</td>${result.projections.incomeStatement.revenue.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>Gross Profit</td>${result.projections.incomeStatement.grossProfit.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td style="font-weight:700;color:var(--eng-brass);">Net Profit</td>${result.projections.incomeStatement.netProfit.map(v=>`<td style="font-weight:700;">${fmt(v)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="eng-panel">
+      <h3>Cash Position — Projected</h3>
+      <table>
+        <thead><tr><th>Line Item</th>${futureLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><td>Operating Cash Flow</td>${result.projections.cashFlow.operatingCash.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td style="font-weight:700;color:var(--eng-brass);">Ending Cash Balance</td>${result.projections.cashFlow.endingCashBalance.map(v=>`<td style="font-weight:700;${v<0?'color:var(--eng-rust);':''}">${fmt(v)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="eng-panel">
+      <h3>Trend Summary</h3>
+      <table><tbody>
+        <tr><td>Revenue Growth Rate</td><td>${(result.trends.revenueGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+        <tr><td>Cash Growth Rate</td><td>${(result.trends.cashGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+        <tr><td>Liability Growth Rate</td><td>${(result.trends.liabilityGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+      </tbody></table>
+    </div>
+  `;
+}
+
+function renderEngineResults(d){
+  if(d.periods.length < 3){
+    const needed = 3 - d.periods.length;
+    return `<div class="eng-panel eng-panel-raised">
+      <div class="eng-empty-state">Add ${needed} more period${needed!==1?'s':''} of historical data to generate your forecast. The engine needs at least 3 periods to identify reliable trends across your statements.</div>
+    </div>`;
+  }
+
+  // Check all required fields are filled for every period
+  const incomplete = d.periods.some(p =>
+    p.income.revenue==='' || p.income.cogs==='' || p.income.opex==='' ||
+    p.balance.cash==='' || p.balance.otherAssets==='' || p.balance.totalLiabilities==='' || p.balance.equity==='' ||
+    p.cashflow.operatingCash==='' || p.cashflow.investingCash==='' || p.cashflow.financingCash===''
+  );
+  if(incomplete){
+    return `<div class="eng-panel eng-panel-raised">
+      <div class="eng-empty-state">Fill in every field for each period above to generate your forecast. Partial data can't be reliably projected.</div>
+    </div>`;
+  }
+
+  let result;
+  try {
+    result = window.ForecastEngine.generateForecast({
+      periodType: d.periodType,
+      periodsAhead: d.forecastHorizon,
+      incomeStatement: d.periods.map(p => ({
+        revenue: Number(p.income.revenue), cogs: Number(p.income.cogs), opex: Number(p.income.opex)
+      })),
+      balanceSheet: d.periods.map(p => ({
+        cash: Number(p.balance.cash), otherAssets: Number(p.balance.otherAssets),
+        totalLiabilities: Number(p.balance.totalLiabilities), equity: Number(p.balance.equity)
+      })),
+      cashFlow: d.periods.map(p => ({
+        operatingCash: Number(p.cashflow.operatingCash), investingCash: Number(p.cashflow.investingCash),
+        financingCash: Number(p.cashflow.financingCash)
+      })),
+    });
+  } catch(e){
+    return `<div class="eng-panel eng-panel-raised"><div class="eng-empty-state">Could not generate forecast: ${escapeHtml(e.message)}</div></div>`;
+  }
+
+  const unit = d.periodType==='monthly' ? 'Month' : 'Quarter';
+  const periodLabels = d.periods.map((p,i) => p.label || `Period ${i+1}`);
+  const futureLabels = Array.from({length: d.forecastHorizon}, (_,i) => `${unit} +${i+1}`);
+
+  return `
+    <div class="eng-narrative">${result.narrative}</div>
+
+    <div class="eng-panel" style="margin-top:20px;">
+      <h3>Key Flags</h3>
+      ${result.flags.map(f => `
+        <div style="margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--eng-line);">
+          <span class="eng-pill ${f.severity}">${f.severity}</span>
+          <p style="margin:8px 0 0; font-family:'Inter',sans-serif; font-size:13.5px; color:var(--eng-text-soft); line-height:1.6;">${escapeHtml(f.message)}</p>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="eng-panel">
+      <h3>Income Statement — Projected (${d.forecastHorizon} ${d.periodType==='monthly'?'Months':'Quarters'} Ahead)</h3>
+      <table>
+        <thead><tr><th>Line Item</th>${futureLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><td>Revenue</td>${result.projections.incomeStatement.revenue.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>COGS</td>${result.projections.incomeStatement.cogs.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>Gross Profit</td>${result.projections.incomeStatement.grossProfit.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>Operating Expenses</td>${result.projections.incomeStatement.opex.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td style="font-weight:700; color:var(--eng-brass);">Net Profit</td>${result.projections.incomeStatement.netProfit.map(v=>`<td style="font-weight:700;">${fmt(v)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="eng-panel">
+      <h3>Cash Position — Projected</h3>
+      <table>
+        <thead><tr><th>Line Item</th>${futureLabels.map(l=>`<th>${l}</th>`).join('')}</tr></thead>
+        <tbody>
+          <tr><td>Operating Cash Flow</td>${result.projections.cashFlow.operatingCash.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>Investing Cash Flow</td>${result.projections.cashFlow.investingCash.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td>Financing Cash Flow</td>${result.projections.cashFlow.financingCash.map(v=>`<td>${fmt(v)}</td>`).join('')}</tr>
+          <tr><td style="font-weight:700; color:var(--eng-brass);">Ending Cash Balance</td>${result.projections.cashFlow.endingCashBalance.map(v=>`<td style="font-weight:700; ${v<0?'color:var(--eng-rust);':''}">${fmt(v)}</td>`).join('')}</tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="eng-panel">
+      <h3>Trend Summary (from your historical data)</h3>
+      <table>
+        <tbody>
+          <tr><td>Revenue Growth Rate</td><td>${(result.trends.revenueGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+          <tr><td>Expense Growth Rate</td><td>${(result.trends.expenseGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+          <tr><td>Cash Growth Rate</td><td>${(result.trends.cashGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+          <tr><td>Liability Growth Rate</td><td>${(result.trends.liabilityGrowthRate*100).toFixed(1)}% per ${d.periodType==='monthly'?'month':'quarter'}</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- HELPERS ----------
+function field(label, tool, key, value, placeholder, type){
+  const isNumber = !type || type === 'number';
+  const inputType = isNumber ? 'text' : type;
+  const inputMode = isNumber ? 'inputmode="decimal"' : '';
+  placeholder = placeholder || '';
+  return `<div class="field">
+    <label>${label}</label>
+    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false" dir="ltr"
+      data-tool="${tool}" data-key="${key}" class="tool-input"
+      value="${escapeHtml(value)}" placeholder="${placeholder}">
+  </div>`;
+}
+function escapeHtml(str){
+  if(str===undefined||str===null) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
