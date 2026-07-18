@@ -72,11 +72,18 @@
 
     // Only re-run fixInputs when new child elements are added (not on attribute changes)
     var observer = new MutationObserver(function(mutations) {
-      var hasNewNodes = mutations.some(function(m) { return m.addedNodes.length > 0; });
-      if (hasNewNodes) fixInputs();
+      for (var i = 0; i < mutations.length; i++) {
+        if (mutations[i].addedNodes.length > 0) {
+          fixInputs();
+          break;
+        }
+      }
     });
     observer.observe(document.getElementById('tool-container') || document.body, {
-      childList: true, subtree: true
+      childList: true,
+      subtree: true,
+      attributes: false,
+      characterData: false
     });
 
     // Fix 5: Update results when focus leaves any input field
@@ -126,7 +133,7 @@
         trackerTimer = setTimeout(function() {
           // Re-render with latest currentData (not stale d)
           if (typeof renderTool === 'function') renderTool();
-        }, 300);
+        }, 200);
       } else {
         if (typeof renderTool === 'function') renderTool();
       }
