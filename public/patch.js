@@ -40,8 +40,9 @@
       if (e.key !== 'Enter' && e.key !== 'Tab') return;
       var input = e.target;
       if (!input || input.tagName !== 'INPUT') return;
-      // Don't intercept login form
       if (input.closest('#login-screen')) return;
+      // Skip tracker — Tab should move between fields normally, not trigger re-render
+      if (window.activeTab === 'tracker') return;
 
       if (e.key === 'Enter') e.preventDefault();
       clearTimeout(window._patchTimer);
@@ -91,6 +92,8 @@
       var input = e.target;
       if (!input || input.tagName !== 'INPUT') return;
       if (input.closest('#login-screen')) return;
+      // Skip tracker — it has its own update logic
+      if (window.activeTab === 'tracker') return;
       clearTimeout(window._patchTimer);
       window._patchTimer = setTimeout(function() {
         var el = document.getElementById('tool-result');
