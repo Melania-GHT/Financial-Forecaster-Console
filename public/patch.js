@@ -58,15 +58,23 @@
 
     // Fix 4: Add dir=ltr to all existing and future inputs
     function fixInputs() {
-      document.querySelectorAll('input[type="number"], input[inputmode="decimal"]').forEach(function(input) {
+      document.querySelectorAll('input').forEach(function(input) {
+        if (input.type === 'email' || input.type === 'password') return;
+        if (input.getAttribute('dir') === 'ltr') return; // already fixed, skip
         input.setAttribute('dir', 'ltr');
-        input.setAttribute('type', 'text');
+        if (input.type === 'number') {
+          input.setAttribute('type', 'text');
+          input.setAttribute('inputmode', 'decimal');
+        }
       });
     }
     fixInputs();
 
-    // Re-apply to new inputs as tools are navigated
-    var observer = new MutationObserver(function() { fixInputs(); });
+    // Only re-run fixInputs when new child elements are added (not on attribute changes)
+    var observer = new MutationObserver(function(mutations) {
+      var hasNewNodes = mutations.some(function(m) { return m.addedNodes.length > 0; });
+      if (hasNewNodes) fixInputs();
+    });
     observer.observe(document.getElementById('tool-container') || document.body, {
       childList: true, subtree: true
     });
@@ -101,6 +109,28 @@
     addAdminLink();
     setTimeout(addAdminLink, 1000);
     setTimeout(addAdminLink, 2000);
+
+    // Fix 7: Debounce tracker row updates so typing doesn't trigger full re-render
+    var originalUpdateTrackerRow = window.updateTrackerRow;
+    var trackerTimer = null;
+    window.updateTrackerRow = function(i, field, val) {
+      // Update the data immediately
+      var d = window.getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
+      d.rows[i][field] = val;
+      window.currentData['tracker'] = d;
+      if (typeof scheduleSave === 'function') scheduleSave();
+
+      // Only re-render after typing pauses (not on every keystroke)
+      if (field === 'name' || field === 'amt') {
+        clearTimeout(trackerTimer);
+        trackerTimer = setTimeout(function() {
+          if (typeof updateToolRaw === 'function') updateToolRaw('tracker', d);
+        }, 600);
+      } else {
+        // Category change (dropdown) — re-render immediately
+        if (typeof updateToolRaw === 'function') updateToolRaw('tracker', d);
+      }
+    };
 
     console.log('[patch.js] All fixes applied.');
   });
