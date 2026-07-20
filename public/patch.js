@@ -143,12 +143,8 @@
         // Find which input has focus and its position among all tracker inputs
         var trackerInputs = document.querySelectorAll('#tracker-rows input');
         var focusedIndex = -1;
-        var cursorPos = 0;
         trackerInputs.forEach(function(inp, idx) {
-          if (inp === document.activeElement) {
-            focusedIndex = idx;
-            cursorPos = inp.selectionStart || inp.value.length;
-          }
+          if (inp === document.activeElement) focusedIndex = idx;
         });
 
         if (typeof renderTool === 'function') renderTool();
@@ -162,7 +158,20 @@
             try { newInputs[focusedIndex].setSelectionRange(len, len); } catch(e){}
           }
         }
-      }, 800);
+      }, 500);
+    };
+
+    // Fix 8: Flush tracker data when navigating away from the tracker
+    var originalGoTo = window.goTo;
+    window.goTo = function(id) {
+      // If leaving tracker, flush any pending re-render immediately
+      if (window.activeTab === 'tracker' && trackerRenderTimer) {
+        clearTimeout(trackerRenderTimer);
+        trackerRenderTimer = null;
+        // Update the spending summary before navigating
+        if (typeof renderTool === 'function') renderTool();
+      }
+      if (typeof originalGoTo === 'function') originalGoTo(id);
     };
 
     console.log('[patch.js] All fixes applied.');
