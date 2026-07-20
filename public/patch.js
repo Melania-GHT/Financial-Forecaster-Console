@@ -1,12 +1,19 @@
-// patch.js — fixes result updates without requiring full index.html replacement
-// Loaded after the main app script
-
+// patch.js — fixes for Clarity Console
 (function() {
   'use strict';
 
-  // Wait for app to fully initialize
+  // Helper to get active tab from DOM (since activeTab is not on window)
+  function getActiveTab() {
+    var active = document.querySelector('.nav-item.active');
+    if (!active) return null;
+    var onclick = active.getAttribute('onclick') || '';
+    var match = onclick.match(/goTo\('(\w+)'\)/);
+    return match ? match[1] : null;
+  }
+
+  // Wait for app functions to be available on window
   function waitForApp(callback) {
-    if (typeof updateField === 'function' && typeof renderResultOnly === 'function') {
+    if (typeof window.renderTracker === 'function' && typeof window.goTo === 'function') {
       callback();
     } else {
       setTimeout(function() { waitForApp(callback); }, 100);
@@ -15,53 +22,16 @@
 
   waitForApp(function() {
     console.log('[patch.js] App loaded, applying fixes...');
+    window._patchApplied = true;
 
-    // Fix 1: Override updateField to trigger result updates after typing pauses
-    var originalUpdateField = window.updateField;
-    window.updateField = function(tool, field, value) {
-      if (!window.currentData[tool]) window.currentData[tool] = {};
-      window.currentData[tool][field] = value;
-
-      // Schedule result update after typing pauses
-      clearTimeout(window._patchTimer);
-      window._patchTimer = setTimeout(function() {
-        var el = document.getElementById('tool-result');
-        if (!el) return;
-        if (typeof renderResultOnly === 'function') renderResultOnly();
-      }, 400);
-
-      // Also trigger save
-      if (typeof scheduleSave === 'function') scheduleSave();
-    };
-
-    // Fix 2: Add Enter key handler to all tool inputs
-    // Also handle Tab leaving an input field
-    document.addEventListener('keydown', function(e) {
-      if (e.key !== 'Enter' && e.key !== 'Tab') return;
-      var input = e.target;
-      if (!input || input.tagName !== 'INPUT') return;
-      if (input.closest('#login-screen')) return;
-      // Skip tracker — Tab should move between fields normally, not trigger re-render
-      if (window.activeTab === 'tracker') return;
-
-      if (e.key === 'Enter') e.preventDefault();
-      clearTimeout(window._patchTimer);
-
-      setTimeout(function() {
-        var el = document.getElementById('tool-result');
-        if (!el) return;
-        if (typeof renderResultOnly === 'function') renderResultOnly();
-      }, 50);
-    }, true);
-
-    // Fix 3: Add dir=ltr to body
+    // Fix 1: dir=ltr on body
     document.body.setAttribute('dir', 'ltr');
 
-    // Fix 4: Add dir=ltr to all existing and future inputs
+    // Fix 2: Apply dir=ltr to all inputs (fix backwards typing)
     function fixInputs() {
       document.querySelectorAll('input').forEach(function(input) {
         if (input.type === 'email' || input.type === 'password') return;
-        if (input.getAttribute('dir') === 'ltr') return; // already fixed, skip
+        if (input.getAttribute('dir') === 'ltr') return;
         input.setAttribute('dir', 'ltr');
         if (input.type === 'number') {
           input.setAttribute('type', 'text');
@@ -71,38 +41,44 @@
     }
     fixInputs();
 
-    // Only re-run fixInputs when new child elements are added (not on attribute changes)
+    // Watch for new inputs being added (e.g. tracker rows, engine periods)
     var observer = new MutationObserver(function(mutations) {
-      for (var i = 0; i < mutations.length; i++) {
-        if (mutations[i].addedNodes.length > 0) {
-          fixInputs();
-          break;
-        }
-      }
+      var hasNew = mutations.some(function(m) { return m.addedNodes.length > 0; });
+      if (hasNew) fixInputs();
     });
     observer.observe(document.getElementById('tool-container') || document.body, {
-      childList: true,
-      subtree: true,
-      attributes: false,
-      characterData: false
+      childList: true, subtree: true, attributes: false, characterData: false
     });
 
-    // Fix 5: Update results when focus leaves any input field
+    // Fix 3: Enter/Tab triggers result update (except tracker)
+    document.addEventListener('keydown', function(e) {
+      if (e.key !== 'Enter' && e.key !== 'Tab') return;
+      var input = e.target;
+      if (!input || input.tagName !== 'INPUT') return;
+      if (input.closest('#login-screen')) return;
+      if (getActiveTab() === 'tracker') return;
+      if (e.key === 'Enter') e.preventDefault();
+      clearTimeout(window._patchTimer);
+      window._patchTimer = setTimeout(function() {
+        var el = document.getElementById('tool-result');
+        if (el && typeof window.renderResultOnly === 'function') window.renderResultOnly();
+      }, 50);
+    }, true);
+
+    // Fix 4: Blur triggers result update (except tracker)
     document.addEventListener('blur', function(e) {
       var input = e.target;
       if (!input || input.tagName !== 'INPUT') return;
       if (input.closest('#login-screen')) return;
-      // Skip tracker — it has its own update logic
-      if (window.activeTab === 'tracker') return;
+      if (getActiveTab() === 'tracker') return;
       clearTimeout(window._patchTimer);
       window._patchTimer = setTimeout(function() {
         var el = document.getElementById('tool-result');
-        if (!el) return;
-        if (typeof renderResultOnly === 'function') renderResultOnly();
+        if (el && typeof window.renderResultOnly === 'function') window.renderResultOnly();
       }, 100);
     }, true);
 
-    // Fix 6: Add Admin link to sidebar
+    // Fix 5: Admin Panel link in sidebar
     function addAdminLink() {
       var sidebar = document.querySelector('.sidebar');
       if (!sidebar || document.getElementById('admin-link')) return;
@@ -115,65 +91,53 @@
       link.onmouseout = function(){ this.style.color='#9aa9bb'; this.style.borderColor='rgba(255,255,255,0.15)'; };
       sidebar.appendChild(link);
     }
-    // Try immediately and also after app loads
     addAdminLink();
     setTimeout(addAdminLink, 1000);
     setTimeout(addAdminLink, 2000);
 
-    // Fix 7: Prevent tracker from re-rendering on every keystroke
-    var trackerRenderTimer = null;
+    // Fix 6: Tracker — debounce re-render during typing, restore focus after
+    var trackerTimer = null;
+    var origUpdateTrackerRow = window.updateTrackerRow;
     window.updateTrackerRow = function(i, field, val) {
-      // Update data immediately
-      if (!window.currentData.tracker) window.currentData.tracker = {rows:[{name:'',amt:'',cat:'Payroll'}]};
-      if (window.currentData.tracker.rows[i]) {
-        window.currentData.tracker.rows[i][field] = val;
-      }
-      if (typeof scheduleSave === 'function') scheduleSave();
-
-      // Category dropdown — re-render immediately
+      // Category change — re-render immediately
       if (field === 'cat') {
-        clearTimeout(trackerRenderTimer);
-        if (typeof renderTool === 'function') renderTool();
+        origUpdateTrackerRow(i, field, val);
         return;
       }
-
-      // Text/number fields — debounce re-render, restore focus after
-      clearTimeout(trackerRenderTimer);
-      trackerRenderTimer = setTimeout(function() {
-        // Find which input has focus and its position among all tracker inputs
-        var trackerInputs = document.querySelectorAll('#tracker-rows input');
-        var focusedIndex = -1;
-        trackerInputs.forEach(function(inp, idx) {
-          if (inp === document.activeElement) focusedIndex = idx;
-        });
-
-        if (typeof renderTool === 'function') renderTool();
-
-        // Restore focus to the same input position after re-render
-        if (focusedIndex >= 0) {
+      // Text/number — update data directly, debounce re-render
+      var d = window.getToolData ? window.getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]}) : null;
+      if (d && d.rows[i]) {
+        d.rows[i][field] = val;
+        if (typeof window.scheduleSave === 'function') window.scheduleSave();
+      }
+      clearTimeout(trackerTimer);
+      trackerTimer = setTimeout(function() {
+        var inputs = document.querySelectorAll('#tracker-rows input');
+        var focusIdx = -1;
+        inputs.forEach(function(inp, idx) { if (inp === document.activeElement) focusIdx = idx; });
+        if (typeof window.renderTool === 'function') window.renderTool();
+        if (focusIdx >= 0) {
           var newInputs = document.querySelectorAll('#tracker-rows input');
-          if (newInputs[focusedIndex]) {
-            newInputs[focusedIndex].focus();
-            var len = newInputs[focusedIndex].value.length;
-            try { newInputs[focusedIndex].setSelectionRange(len, len); } catch(e){}
+          if (newInputs[focusIdx]) {
+            newInputs[focusIdx].focus();
+            var len = newInputs[focusIdx].value.length;
+            try { newInputs[focusIdx].setSelectionRange(len, len); } catch(e) {}
           }
         }
       }, 500);
     };
 
-    // Fix 8: Flush tracker data when navigating away from the tracker
-    var originalGoTo = window.goTo;
+    // Fix 7: Flush tracker on navigation away
+    var origGoTo = window.goTo;
     window.goTo = function(id) {
-      // If leaving tracker, flush any pending re-render immediately
-      if (window.activeTab === 'tracker' && trackerRenderTimer) {
-        clearTimeout(trackerRenderTimer);
-        trackerRenderTimer = null;
-        // Update the spending summary before navigating
-        if (typeof renderTool === 'function') renderTool();
+      if (getActiveTab() === 'tracker' && trackerTimer) {
+        clearTimeout(trackerTimer);
+        trackerTimer = null;
+        if (typeof window.renderTool === 'function') window.renderTool();
       }
-      if (typeof originalGoTo === 'function') originalGoTo(id);
+      origGoTo(id);
     };
 
-    console.log('[patch.js] All fixes applied.');
+    console.log('[patch.js] All fixes applied successfully.');
   });
 })();
