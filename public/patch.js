@@ -120,18 +120,50 @@
     setTimeout(addAdminLink, 1000);
     setTimeout(addAdminLink, 2000);
 
-    // Fix 7: Fix tracker inputs — they get recreated on every keystroke so need special handling
-    document.addEventListener('focusin', function(e) {
-      var input = e.target;
-      if (!input || input.tagName !== 'INPUT') return;
-      if (input.getAttribute('dir') === 'ltr') return;
-      // Apply dir=ltr immediately when any input receives focus
-      input.setAttribute('dir', 'ltr');
-      if (input.type === 'number') {
-        input.setAttribute('type', 'text');
-        input.setAttribute('inputmode', 'decimal');
+    // Fix 7: Prevent tracker from re-rendering on every keystroke
+    var trackerRenderTimer = null;
+    window.updateTrackerRow = function(i, field, val) {
+      // Update data immediately
+      if (!window.currentData.tracker) window.currentData.tracker = {rows:[{name:'',amt:'',cat:'Payroll'}]};
+      if (window.currentData.tracker.rows[i]) {
+        window.currentData.tracker.rows[i][field] = val;
       }
-    }, true);
+      if (typeof scheduleSave === 'function') scheduleSave();
+
+      // Category dropdown — re-render immediately
+      if (field === 'cat') {
+        clearTimeout(trackerRenderTimer);
+        if (typeof renderTool === 'function') renderTool();
+        return;
+      }
+
+      // Text/number fields — debounce re-render, restore focus after
+      clearTimeout(trackerRenderTimer);
+      trackerRenderTimer = setTimeout(function() {
+        // Find which input has focus and its position among all tracker inputs
+        var trackerInputs = document.querySelectorAll('#tracker-rows input');
+        var focusedIndex = -1;
+        var cursorPos = 0;
+        trackerInputs.forEach(function(inp, idx) {
+          if (inp === document.activeElement) {
+            focusedIndex = idx;
+            cursorPos = inp.selectionStart || inp.value.length;
+          }
+        });
+
+        if (typeof renderTool === 'function') renderTool();
+
+        // Restore focus to the same input position after re-render
+        if (focusedIndex >= 0) {
+          var newInputs = document.querySelectorAll('#tracker-rows input');
+          if (newInputs[focusedIndex]) {
+            newInputs[focusedIndex].focus();
+            var len = newInputs[focusedIndex].value.length;
+            try { newInputs[focusedIndex].setSelectionRange(len, len); } catch(e){}
+          }
+        }
+      }, 800);
+    };
 
     console.log('[patch.js] All fixes applied.');
   });
