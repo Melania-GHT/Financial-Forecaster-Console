@@ -2,7 +2,6 @@
 (function() {
   'use strict';
 
-  // Helper to get active tab from DOM (since activeTab is not on window)
   function getActiveTab() {
     var active = document.querySelector('.nav-item.active');
     if (!active) return null;
@@ -11,13 +10,73 @@
     return match ? match[1] : null;
   }
 
-  // Wait for app functions to be available on window
   function waitForApp(callback) {
     if (typeof window.renderTracker === 'function' && typeof window.goTo === 'function') {
       callback();
     } else {
       setTimeout(function() { waitForApp(callback); }, 100);
     }
+  }
+
+  // Shared field mappings
+  var SHARED_FIELDS = {
+    revenue: [
+      { tool: 'truth', field: 'revenue' },
+      { tool: 'pnl',   field: 'revenue' },
+      { tool: 'snapshot', field: 'revenue' },
+    ],
+    expenses: [
+      { tool: 'truth', field: 'expenses' },
+      { tool: 'snapshot', field: 'expenses' },
+      { tool: 'pnl',   field: 'opex' },
+    ],
+    cash: [
+      { tool: 'truth', field: 'bank' },
+      { tool: 'lag',   field: 'cash' },
+      { tool: 'snapshot', field: 'cash' },
+    ],
+  };
+
+  function getSharedConcept(tool, field) {
+    for (var concept in SHARED_FIELDS) {
+      var fields = SHARED_FIELDS[concept];
+      for (var i = 0; i < fields.length; i++) {
+        if (fields[i].tool === tool && fields[i].field === field) return concept;
+      }
+    }
+    return null;
+  }
+
+  // Sync value across all tools sharing the same concept
+  // Uses goTo to navigate to each tool briefly isn't practical — 
+  // instead write directly to the hidden currentData via renderTool side effects
+  function syncSharedField(concept, value, sourceTool) {
+    var fields = SHARED_FIELDS[concept];
+    if (!fields || !value) return;
+    // We can't access currentData directly, but we can use getToolData
+    // via the global renderTool — instead store in a pending sync object
+    // that gets applied when the user navigates to each tool
+    if (!window._pendingSync) window._pendingSync = {};
+    fields.forEach(function(f) {
+      if (f.tool === sourceTool) return;
+      if (!window._pendingSync[f.tool]) window._pendingSync[f.tool] = {};
+      window._pendingSync[f.tool][f.field] = value;
+    });
+  }
+
+  // Apply pending syncs when a tool loads
+  function applyPendingSync(tool) {
+    if (!window._pendingSync || !window._pendingSync[tool]) return;
+    var pending = window._pendingSync[tool];
+    delete window._pendingSync[tool];
+    // Find inputs on the page and set their values + trigger input event
+    Object.keys(pending).forEach(function(field) {
+      var input = document.querySelector('.tool-input[data-tool="'+tool+'"][data-key="'+field+'"]');
+      if (input && pending[field]) {
+        input.value = pending[field];
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
+    });
   }
 
   waitForApp(function() {
@@ -27,7 +86,7 @@
     // Fix 1: dir=ltr on body
     document.body.setAttribute('dir', 'ltr');
 
-    // Fix 2: Apply dir=ltr to all inputs (fix backwards typing)
+    // Fix 2: Apply dir=ltr to all inputs
     function fixInputs() {
       document.querySelectorAll('input').forEach(function(input) {
         if (input.type === 'email' || input.type === 'password') return;
@@ -41,10 +100,14 @@
     }
     fixInputs();
 
-    // Watch for new inputs being added (e.g. tracker rows, engine periods)
     var observer = new MutationObserver(function(mutations) {
       var hasNew = mutations.some(function(m) { return m.addedNodes.length > 0; });
-      if (hasNew) fixInputs();
+      if (hasNew) {
+        fixInputs();
+        // Apply pending syncs when new tool inputs appear
+        var tab = getActiveTab();
+        if (tab) applyPendingSync(tab);
+      }
     });
     observer.observe(document.getElementById('tool-container') || document.body, {
       childList: true, subtree: true, attributes: false, characterData: false
@@ -95,16 +158,11 @@
     setTimeout(addAdminLink, 1000);
     setTimeout(addAdminLink, 2000);
 
-    // Fix 6: Tracker — debounce re-render during typing, restore focus after
+    // Fix 6: Tracker debounce
     var trackerTimer = null;
     var origUpdateTrackerRow = window.updateTrackerRow;
     window.updateTrackerRow = function(i, field, val) {
-      // Category change — re-render immediately
-      if (field === 'cat') {
-        origUpdateTrackerRow(i, field, val);
-        return;
-      }
-      // Text/number — update data directly, debounce re-render
+      if (field === 'cat') { origUpdateTrackerRow(i, field, val); return; }
       var d = window.getToolData ? window.getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]}) : null;
       if (d && d.rows[i]) {
         d.rows[i][field] = val;
@@ -127,7 +185,7 @@
       }, 500);
     };
 
-    // Fix 7: Flush tracker on navigation away
+    // Fix 7: Flush tracker on navigation
     var origGoTo = window.goTo;
     window.goTo = function(id) {
       if (getActiveTab() === 'tracker' && trackerTimer) {
@@ -137,6 +195,25 @@
       }
       origGoTo(id);
     };
+
+    // Fix 8: Shared field sync
+    var toolContainer = document.getElementById('tool-container');
+    if (toolContainer) {
+      toolContainer.addEventListener('input', function(e) {
+        var input = e.target;
+        if (!input || !input.classList.contains('tool-input')) return;
+        var tool = input.dataset.tool;
+        var field = input.dataset.key;
+        var value = input.value;
+        var concept = getSharedConcept(tool, field);
+        if (concept && value) {
+          clearTimeout(window._syncTimer);
+          window._syncTimer = setTimeout(function() {
+            syncSharedField(concept, value, tool);
+          }, 1000);
+        }
+      });
+    }
 
     console.log('[patch.js] All fixes applied successfully.');
   });
