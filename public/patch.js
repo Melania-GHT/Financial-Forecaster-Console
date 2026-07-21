@@ -196,24 +196,20 @@
       origGoTo(id);
     };
 
-    // Fix 8: Shared field sync
-    var toolContainer = document.getElementById('tool-container');
-    if (toolContainer) {
-      toolContainer.addEventListener('input', function(e) {
-        var input = e.target;
-        if (!input || !input.classList.contains('tool-input')) return;
-        var tool = input.dataset.tool;
-        var field = input.dataset.key;
-        var value = input.value;
-        var concept = getSharedConcept(tool, field);
-        if (concept && value) {
-          clearTimeout(window._syncTimer);
-          window._syncTimer = setTimeout(function() {
-            syncSharedField(concept, value, tool);
-          }, 1000);
-        }
-      });
-    }
+    // Fix 8: Shared field sync — hook into updateField
+    var origUpdateField = window.updateField;
+    window.updateField = function(tool, field, value) {
+      // Call original first
+      origUpdateField(tool, field, value);
+      // Then sync shared fields
+      var concept = getSharedConcept(tool, field);
+      if (concept && value) {
+        clearTimeout(window._syncTimer);
+        window._syncTimer = setTimeout(function() {
+          syncSharedField(concept, value, tool);
+        }, 1000);
+      }
+    };
 
     console.log('[patch.js] All fixes applied successfully.');
   });
