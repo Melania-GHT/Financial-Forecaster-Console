@@ -233,7 +233,7 @@
   @media(max-width:720px){ .engine .eng-grid3, .engine .eng-grid4{ grid-template-columns:1fr; } }
 </style>
 </head>
-<body>
+<body dir="ltr">
 
 <!-- LOGIN SCREEN -->
 <div id="login-screen" class="login-wrap">
@@ -417,29 +417,35 @@ function showApp(){
     const tool = input.dataset.tool;
     const key = input.dataset.key;
     if (!tool || !key) return;
-    if (!currentData[tool]) currentData[tool] = {};
-    currentData[tool][key] = input.value;
-    // Keep cursor at end after every keystroke
-    const len = input.value.length;
-    setTimeout(() => {
-      try { input.setSelectionRange(len, len); } catch(err) {}
-    }, 0);
-    scheduleSave();
-    isTyping = true;
-    clearTimeout(typingTimer);
-    typingTimer = setTimeout(() => { isTyping = false; var el = document.getElementById('tool-result'); if(el && worker) { workerRun('COMPUTE_RESULT',{tool:activeTab,data:currentData[activeTab]||{}}).then(function(r){if(r&&r.result){renderResultFromWorker(r.result);}}); } else if(el) { renderResultOnly(); } }, 300);
+    // Call updateField which handles data update + typing timer + result update
+    updateField(tool, key, input.value);
   });
 
-  // On focus, move cursor to end of field so typing appends correctly
-  toolContainer.addEventListener('focus', (e) => {
+  // Update results immediately when Enter or Tab is pressed
+  toolContainer.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== 'Tab') return;
     const input = e.target;
     if (!input.classList.contains('tool-input')) return;
-    const len = input.value.length;
-    // Small delay needed for Edge on Windows to honour setSelectionRange on focus
+    if (e.key === 'Enter') e.preventDefault();
+    isTyping = false;
+    clearTimeout(typingTimer);
+    // Small delay to let Tab focus settle before updating
     setTimeout(() => {
-      try { input.setSelectionRange(len, len); } catch(err) {}
-    }, 0);
-  }, true);
+      const el = document.getElementById('tool-result');
+      if (!el) return;
+      if (worker) {
+        workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
+          .then(({ result }) => {
+            if (result !== undefined) {
+              const resultEl = document.getElementById('tool-result');
+              if (resultEl) renderResultFromWorker(result);
+            }
+          });
+      } else {
+        renderResultOnly();
+      }
+    }, 50);
+  });
 
   // Kill autocomplete dropdown interference on every keystroke
   // Edge on Windows shows suggestion dropdowns that hijack subsequent keystrokes
@@ -500,7 +506,10 @@ function getToolData(tool, fallback){
   return currentData[tool];
 }
 let toolResultEl = null;
-function getToolResult(){ return toolResultEl || (toolResultEl = document.getElementById('tool-result')); }
+function getToolResult(){ 
+  // Always get fresh element — cached version may have stale id
+  return document.getElementById('tool-result');
+}
 
 let resultOnlyTimer = null;
 let isTyping = false;
@@ -516,9 +525,18 @@ function updateField(tool, field, value){
   clearTimeout(typingTimer);
   typingTimer = setTimeout(() => {
     isTyping = false;
-    // Disabled temporarily to isolate cursor issue
-    // Results will show when user clicks away from field
-  }, 500);
+    // Update results now that typing has paused
+    const el = getToolResult();
+    if (!el) return;
+    if (worker) {
+      workerRun('COMPUTE_RESULT', { tool: activeTab, data: currentData[activeTab] || {} })
+        .then(({ result }) => {
+          if (result !== undefined && !isTyping) renderResultFromWorker(result);
+        });
+    } else {
+      renderResultOnly();
+    }
+  }, 600);
 }
 function updateToolRaw(tool, value){
   currentData[tool] = value;
@@ -1044,15 +1062,16 @@ function renderEngine(c){
   const periodsContainer = c.querySelector('#eng-periods');
   if(periodsContainer){
     periodsContainer.addEventListener('input', handleEngineInput);
-    // Move cursor to end on focus for engine inputs too
-    periodsContainer.addEventListener('focus', (e) => {
+    // Update engine results immediately on Enter
+    periodsContainer.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
       const input = e.target;
       if (!input.classList.contains('eng-input')) return;
-      const len = input.value.length;
-      setTimeout(() => {
-        try { input.setSelectionRange(len, len); } catch(err) {}
-      }, 0);
-    }, true);
+      e.preventDefault();
+      const d = getEngineData();
+      const resultsEl = document.getElementById('eng-results');
+      if (resultsEl) resultsEl.innerHTML = renderEngineResults(d);
+    });
   }
 }
 
@@ -1099,7 +1118,7 @@ function engineField(label, periodIndex, statement, key, value){
     <label>${label}</label>
     <input type="text" inputmode="decimal" autocomplete="off" spellcheck="false"
       value="${escapeHtml(value)}" placeholder=""
-      data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input">
+      data-period="${periodIndex}" data-statement="${statement}" data-key="${key}" class="eng-input" dir="ltr">
   </div>`;
 }
 
@@ -1151,12 +1170,6 @@ function handleEngineInput(e){
 
   currentData.engine = d;
   scheduleSave();
-
-  // Keep cursor at end after every keystroke
-  const len = input.value.length;
-  setTimeout(() => {
-    try { input.setSelectionRange(len, len); } catch(err) {}
-  }, 0);
 
   // Debounce, then offload forecast to worker
   clearTimeout(engineResultTimer);
@@ -1368,7 +1381,7 @@ function field(label, tool, key, value, placeholder, type){
   placeholder = placeholder || '';
   return `<div class="field">
     <label>${label}</label>
-    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false"
+    <input type="${inputType}" ${inputMode} autocomplete="off" spellcheck="false" dir="ltr"
       data-tool="${tool}" data-key="${key}" class="tool-input"
       value="${escapeHtml(value)}" placeholder="${placeholder}">
   </div>`;
