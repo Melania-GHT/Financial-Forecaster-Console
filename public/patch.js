@@ -211,6 +211,37 @@
       }
     };
 
+    // Fix 9: Add "Start Fresh" button to sidebar for monthly reset
+    function addClearButton() {
+      var sidebar = document.querySelector('.sidebar');
+      if (!sidebar || document.getElementById('clear-btn')) return;
+      var btn = document.createElement('button');
+      btn.id = 'clear-btn';
+      btn.textContent = 'Start Fresh (New Month)';
+      btn.style.cssText = 'display:block;width:100%;margin-top:8px;padding:9px 12px;border:1px solid rgba(168,93,79,0.4);border-radius:9px;color:#a8503e;font-size:12px;text-align:center;background:none;cursor:pointer;font-family:Inter,sans-serif;';
+      btn.onmouseover = function(){ this.style.borderColor='#a8503e'; this.style.background='rgba(168,93,79,0.08)'; };
+      btn.onmouseout = function(){ this.style.borderColor='rgba(168,93,79,0.4)'; this.style.background='none'; };
+      btn.onclick = function() {
+        if (!confirm('Clear all your data and start fresh for a new month?\n\nThis cannot be undone.')) return;
+        // Clear via API
+        fetch('/api/data', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ data: {} })
+        }).then(function() {
+          // Reload the page to reset all fields
+          window.location.reload();
+        }).catch(function() {
+          window.location.reload();
+        });
+      };
+      sidebar.appendChild(btn);
+    }
+    addClearButton();
+    setTimeout(addClearButton, 1000);
+    setTimeout(addClearButton, 2000);
+
     console.log('[patch.js] All fixes applied successfully.');
   });
 })();
