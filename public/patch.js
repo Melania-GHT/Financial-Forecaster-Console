@@ -242,6 +242,21 @@
     setTimeout(addClearButton, 1000);
     setTimeout(addClearButton, 2000);
 
+    // Fix 10: Add E-SERVICES BY MEL trademark to bottom of app
+    function addTrademark() {
+      if (document.getElementById('eservices-trademark')) return;
+      var main = document.querySelector('.main');
+      if (!main) return;
+      var footer = document.createElement('div');
+      footer.id = 'eservices-trademark';
+      footer.style.cssText = 'margin-top:48px;padding-top:20px;border-top:1px solid var(--line);text-align:center;color:#b5a99a;font-size:11.5px;font-family:Inter,sans-serif;letter-spacing:0.06em;';
+      footer.innerHTML = '&copy; ' + new Date().getFullYear() + ' <strong style="letter-spacing:0.08em;">E-SERVICES BY MEL</strong> &trade; &nbsp;|&nbsp; The Clarity Console &trade; &nbsp;|&nbsp; All rights reserved.';
+      main.appendChild(footer);
+    }
+    addTrademark();
+    setTimeout(addTrademark, 1500);
+    setTimeout(addTrademark, 3000);
+
     console.log('[patch.js] All fixes applied successfully.');
   });
 })();
