@@ -253,7 +253,16 @@
       footer.innerHTML = '&copy; ' + new Date().getFullYear() + ' <strong style="letter-spacing:0.08em;">E-SERVICES BY MEL</strong> &trade; &nbsp;|&nbsp; The Clarity Console &trade; &nbsp;|&nbsp; All rights reserved.';
       main.appendChild(footer);
     }
+
+    // Watch for app shell becoming visible (after login)
+    var trademarkObserver = new MutationObserver(function() {
+      addTrademark();
+    });
+    trademarkObserver.observe(document.body, { childList: true, subtree: true, attributes: true });
+
+    // Also try immediately and on delays
     addTrademark();
+    setTimeout(addTrademark, 500);
     setTimeout(addTrademark, 1500);
     setTimeout(addTrademark, 3000);
 
