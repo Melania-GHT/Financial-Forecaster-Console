@@ -83,6 +83,23 @@
     console.log('[patch.js] App loaded, applying fixes...');
     window._patchApplied = true;
 
+    // Check access status — redirect to paywall if trial expired
+    fetch('/api/me', { credentials: 'include' })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.loggedIn && !data.hasAccess) {
+          window.location.href = '/paywall.html';
+          return;
+        }
+        if (data.loggedIn && data.status === 'trial' && data.trialDaysLeft <= 2) {
+          // Show trial warning banner
+          var banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c8862b;color:#fff;text-align:center;padding:10px 20px;font-size:13px;font-weight:600;z-index:9999;font-family:Inter,sans-serif;';
+          banner.innerHTML = '⏰ Your free trial ends in <strong>' + data.trialDaysLeft + ' day' + (data.trialDaysLeft !== 1 ? 's' : '') + '</strong>. &nbsp;<a href="/paywall.html" style="color:#fff;text-decoration:underline;">Upgrade now to keep access →</a>';
+          document.body.appendChild(banner);
+        }
+      }).catch(function() {});
+
     // Fix 1: dir=ltr on body
     document.body.setAttribute('dir', 'ltr');
 
