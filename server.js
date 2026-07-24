@@ -307,7 +307,6 @@ app.post('/api/stripe/checkout', requireAuth, async (req, res) => {
     const isRecurring = plan === 'monthly' || plan === 'annual';
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      payment_method_types: ['card'],
       line_items: [{ price: PRICES[plan], quantity: 1 }],
       mode: isRecurring ? 'subscription' : 'payment',
       success_url: `${process.env.APP_URL || 'https://financial-forecaster-console-1.onrender.com'}/payment-success.html?plan=${plan}`,
