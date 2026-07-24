@@ -317,7 +317,14 @@ app.post('/api/stripe/checkout', requireAuth, async (req, res) => {
 
     res.json({ url: session.url });
   } catch (err) {
-    console.error('Checkout error:', err);
+    console.error('Checkout error full details:', {
+      message: err.message,
+      type: err.type,
+      code: err.code,
+      param: err.param,
+      statusCode: err.statusCode,
+      rawType: err.rawType,
+    });
     res.status(500).json({ error: 'Could not create checkout session.' });
   }
 });
