@@ -5,7 +5,9 @@ const session = require('express-session');
 const { Pool } = require('pg');
 const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
+  apiVersion: '2025-03-31.basil',
+});
 
 const app = express();
 const PORT = process.env.PORT || 3000;
