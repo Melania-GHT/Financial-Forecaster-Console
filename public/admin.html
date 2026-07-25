@@ -102,6 +102,7 @@
           <th>Signed Up</th>
           <th>Last Login</th>
           <th>Tools Used</th>
+          <th>Actions</th>
         </tr>
       </thead>
       <tbody id="user-table">
@@ -201,11 +202,19 @@ function renderTable(users) {
     const toolTags = tools.length > 0
       ? tools.map(t => `<span class="tool-tag ${t==='engine'?'engine':''}">${TOOL_LABELS[t]||t}</span>`).join('')
       : '<span class="no-tools">None yet</span>';
+    const trialEnd = u.trial_ends_at ? new Date(u.trial_ends_at).toLocaleDateString() : '—';
+    const statusColor = u.subscription_status === 'lifetime' ? '#6b8f71' : u.subscription_status === 'active' ? '#6b8f71' : u.subscription_status === 'trial' ? '#c9a227' : '#a85d4f';
     return `<tr>
-      <td><div class="email">${escHtml(u.email)}</div></td>
+      <td><div class="email">${escHtml(u.email)}</div>
+        <div style="font-size:11px;color:${statusColor};margin-top:3px;font-weight:700;text-transform:uppercase;">${u.subscription_status||'trial'}${u.subscription_plan?' · '+u.subscription_plan:''}</div>
+      </td>
       <td><div class="date">${formatDate(u.created_at)}</div></td>
       <td><div class="date">${u.last_login ? formatDate(u.last_login) : '—'}</div></td>
       <td><div class="tools">${toolTags}</div></td>
+      <td>
+        <button onclick="grantAccess(${u.id},'${escHtml(u.email)}')" style="background:#6b8f71;color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;margin-bottom:4px;display:block;width:100%;">Grant Access</button>
+        <button onclick="extendTrial(${u.id},'${escHtml(u.email)}')" style="background:rgba(201,162,39,0.2);color:#c9a227;border:1px solid #c9a227;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;display:block;width:100%;">+7 Days Trial</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -219,6 +228,48 @@ function formatDate(dateStr) {
 
 function escHtml(str) {
   return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function grantAccess(userId, email) {
+  if (!confirm(`Grant lifetime access to ${email}?`)) return;
+  try {
+    const res = await fetch('/api/admin/grant-access', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId, plan: 'beta' })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`✅ Lifetime access granted to ${email}`);
+      loadUsers();
+    } else {
+      alert('Error: ' + (data.error || 'Could not grant access'));
+    }
+  } catch(e) {
+    alert('Error connecting to server');
+  }
+}
+
+async function extendTrial(userId, email) {
+  if (!confirm(`Extend trial by 7 days for ${email}?`)) return;
+  try {
+    const res = await fetch('/api/admin/extend-trial', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId, days: 7 })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`✅ Trial extended 7 days for ${email}`);
+      loadUsers();
+    } else {
+      alert('Error: ' + (data.error || 'Could not extend trial'));
+    }
+  } catch(e) {
+    alert('Error connecting to server');
+  }
 }
 
 // Allow Enter key to submit login
