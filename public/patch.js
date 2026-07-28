@@ -426,7 +426,7 @@
     modal.id = 'qb-import-modal';
     modal.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;';
     modal.innerHTML = `
-      <div style="background:#fff;border-radius:16px;padding:32px;max-width:520px;width:100%;box-shadow:0 24px 80px rgba(0,0,0,0.3);">
+      <div style="background:#fff;border-radius:16px;padding:32px;max-width:520px;width:100%;box-shadow:0 24px 80px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
           <h2 style="font-family:Fraunces,serif;font-size:22px;color:#1f3148;margin:0;">Import from QuickBooks</h2>
           <button onclick="document.getElementById('qb-import-modal').remove()" style="background:none;border:none;font-size:22px;cursor:pointer;color:#9a9080;">×</button>
