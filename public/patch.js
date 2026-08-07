@@ -91,11 +91,17 @@
           window.location.href = '/paywall.html';
           return;
         }
-        if (data.loggedIn && data.status === 'trial' && data.trialDaysLeft <= 2) {
-          // Show trial warning banner
+        if (data.loggedIn && data.status === 'trial' && data.trialDaysLeft <= 1) {
+          // Final day warning — urgent
+          var banner = document.createElement('div');
+          banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#a8503e;color:#fff;text-align:center;padding:10px 20px;font-size:13px;font-weight:600;z-index:9999;font-family:Inter,sans-serif;';
+          banner.innerHTML = '⚠️ Your free trial ends <strong>today</strong>. &nbsp;<a href="/paywall.html" style="color:#fff;text-decoration:underline;">Choose a plan now to keep access →</a>';
+          document.body.appendChild(banner);
+        } else if (data.loggedIn && data.status === 'trial' && data.trialDaysLeft <= 2) {
+          // Day before warning — amber
           var banner = document.createElement('div');
           banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c8862b;color:#fff;text-align:center;padding:10px 20px;font-size:13px;font-weight:600;z-index:9999;font-family:Inter,sans-serif;';
-          banner.innerHTML = '⏰ Your free trial ends in <strong>' + data.trialDaysLeft + ' day' + (data.trialDaysLeft !== 1 ? 's' : '') + '</strong>. &nbsp;<a href="/paywall.html" style="color:#fff;text-decoration:underline;">Upgrade now to keep access →</a>';
+          banner.innerHTML = '⏰ Your free trial ends <strong>tomorrow</strong>. &nbsp;<a href="/paywall.html" style="color:#fff;text-decoration:underline;">Upgrade now to keep access →</a>';
           document.body.appendChild(banner);
         }
       }).catch(function() {});

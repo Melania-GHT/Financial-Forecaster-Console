@@ -14,28 +14,22 @@ const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
 
-if (!process.env.DATABASE_URL) {
-  console.error('Missing DATABASE_URL environment variable.');
-  process.exit(1);
-}
-if (!process.env.SESSION_SECRET) {
-  console.error('Missing SESSION_SECRET environment variable.');
-  process.exit(1);
-}
+if (!process.env.DATABASE_URL) { console.error('Missing DATABASE_URL'); process.exit(1); }
+if (!process.env.SESSION_SECRET) { console.error('Missing SESSION_SECRET'); process.exit(1); }
 
 const ADMIN_USER = process.env.ADMIN_USER || 'admin';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || null;
 
-// Stripe price IDs — set these in Render after creating products in Stripe
 const PRICES = {
-  monthly:  process.env.STRIPE_PRICE_MONTHLY,   // $47/month
-  annual:   process.env.STRIPE_PRICE_ANNUAL,    // $249/year
-  lifetime: process.env.STRIPE_PRICE_LIFETIME,  // $497 one-time
-  founding: process.env.STRIPE_PRICE_FOUNDING,  // $297 one-time (limited)
+  monthly:  process.env.STRIPE_PRICE_MONTHLY,
+  annual:   process.env.STRIPE_PRICE_ANNUAL,
+  lifetime: process.env.STRIPE_PRICE_LIFETIME,
+  founding: process.env.STRIPE_PRICE_FOUNDING,
 };
 
-const TRIAL_DAYS = 7;
+const TRIAL_DAYS = 4;
 const FOUNDING_MEMBER_LIMIT = 50;
+const APP_URL = process.env.APP_URL || 'https://financial-forecaster-console-3.onrender.com';
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -66,35 +60,29 @@ async function ensureTablesExist() {
       updated_at TIMESTAMP DEFAULT NOW()
     );
   `);
-  // Add new columns for existing installs
-  const newCols = [
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS tools_used TEXT[] DEFAULT \'{}\'',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT \'trial\'',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_plan TEXT',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT',
-    'ALTER TABLE users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMP',
+  // Add columns for existing installs
+  const cols = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS tools_used TEXT[] DEFAULT '{}'`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_status TEXT DEFAULT 'trial'`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS subscription_plan TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMP`,
   ];
-  for (const col of newCols) {
-    await pool.query(col).catch(() => {});
-  }
+  for (const col of cols) await pool.query(col).catch(() => {});
   console.log('Database tables verified/created successfully.');
 }
 
-// Check if user has active access
 function hasAccess(user) {
   if (!user) return false;
   const status = user.subscription_status;
-  // Trial period
   if (status === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
-  // Active subscription
   if (status === 'active') {
-    if (!user.access_expires_at) return true; // lifetime
+    if (!user.access_expires_at) return true;
     return new Date(user.access_expires_at) > new Date();
   }
-  // Lifetime
   if (status === 'lifetime') return true;
   return false;
 }
@@ -105,31 +93,23 @@ function daysLeftInTrial(user) {
   return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
 }
 
+// ---------- MIDDLEWARE ----------
 app.use(express.json());
-
-// Stripe webhook needs raw body
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
-
+app.use('/api/gumroad/webhook', express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
-
 app.use(session({
   store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: true,
-    sameSite: 'none',
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  },
+  cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: 30 * 24 * 60 * 60 * 1000 },
 }));
 
 function requireAuth(req, res, next) {
   if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' });
   next();
 }
-
 function requireAdmin(req, res, next) {
   if (!req.session.isAdmin) return res.status(401).json({ error: 'Admin access required' });
   next();
@@ -144,24 +124,12 @@ app.post('/api/signup', async (req, res) => {
       return res.status(400).json({ error: 'Email and a password of at least 8 characters are required.' });
     }
     const normalizedEmail = String(email).trim().toLowerCase();
-
-    // Check user limit
-    const maxUsers = parseInt(process.env.MAX_USERS || '0');
-    if (maxUsers > 0) {
-      const countResult = await pool.query('SELECT COUNT(*) FROM users');
-      if (parseInt(countResult.rows[0].count) >= maxUsers) {
-        return res.status(403).json({ error: `We're currently in a closed beta. All spots have been filled. Check back soon!` });
-      }
-    }
-
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (existing.rows.length > 0) {
       return res.status(409).json({ error: 'An account with this email already exists. Try logging in instead.' });
     }
-
     const passwordHash = await bcrypt.hash(password, 12);
     const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
-
     const result = await pool.query(
       `INSERT INTO users (email, password_hash, last_login, trial_ends_at, subscription_status)
        VALUES ($1, $2, NOW(), $3, 'trial') RETURNING id`,
@@ -187,12 +155,11 @@ app.post('/api/login', async (req, res) => {
     if (!email || !password) return res.status(400).json({ error: 'Email and password are required.' });
     const normalizedEmail = String(email).trim().toLowerCase();
     const result = await pool.query('SELECT id, password_hash FROM users WHERE email = $1', [normalizedEmail]);
-    if (result.rows.length === 0) return res.status(401).json({ error: 'Incorrect email or password.' });
-    const user = result.rows[0];
-    const match = await bcrypt.compare(password, user.password_hash);
+    if (!result.rows.length) return res.status(401).json({ error: 'Incorrect email or password.' });
+    const match = await bcrypt.compare(password, result.rows[0].password_hash);
     if (!match) return res.status(401).json({ error: 'Incorrect email or password.' });
-    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [user.id]);
-    req.session.userId = user.id;
+    await pool.query('UPDATE users SET last_login = NOW() WHERE id = $1', [result.rows[0].id]);
+    req.session.userId = result.rows[0].id;
     req.session.email = normalizedEmail;
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Login failed. Please try again.' });
@@ -267,7 +234,6 @@ app.put('/api/data', requireAuth, async (req, res) => {
 
 // ---------- STRIPE ----------
 
-// Get founding member count
 app.get('/api/founding-count', async (req, res) => {
   try {
     const result = await pool.query(`SELECT COUNT(*) FROM users WHERE subscription_plan = 'founding'`);
@@ -278,112 +244,97 @@ app.get('/api/founding-count', async (req, res) => {
   }
 });
 
-// Create Stripe checkout session
 app.post('/api/stripe/checkout', requireAuth, async (req, res) => {
   try {
-    const { plan } = req.body; // 'monthly', 'annual', 'lifetime', 'founding'
+    const { plan } = req.body;
     if (!PRICES[plan]) return res.status(400).json({ error: 'Invalid plan.' });
     if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-      return res.status(503).json({ error: 'Payment system not configured yet. Please check back soon.' });
+      return res.status(503).json({ error: 'Payment system not configured yet.' });
     }
-
-    // Check founding member limit
     if (plan === 'founding') {
       const countResult = await pool.query(`SELECT COUNT(*) FROM users WHERE subscription_plan = 'founding'`);
       if (parseInt(countResult.rows[0].count) >= FOUNDING_MEMBER_LIMIT) {
-        return res.status(400).json({ error: 'Founding member spots are sold out. Please choose another plan.' });
+        return res.status(400).json({ error: 'Founding member spots are sold out.' });
       }
     }
-
-    // Get or create Stripe customer
     const userResult = await pool.query('SELECT stripe_customer_id, email FROM users WHERE id = $1', [req.session.userId]);
     const user = userResult.rows[0];
     let customerId = user.stripe_customer_id;
-
     if (!customerId) {
       const customer = await stripe.customers.create({ email: user.email });
       customerId = customer.id;
       await pool.query('UPDATE users SET stripe_customer_id = $1 WHERE id = $2', [customerId, req.session.userId]);
     }
-
     const isRecurring = plan === 'monthly' || plan === 'annual';
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [{ price: PRICES[plan], quantity: 1 }],
       mode: isRecurring ? 'subscription' : 'payment',
-      success_url: `${process.env.APP_URL || 'https://financial-forecaster-console-1.onrender.com'}/payment-success.html?plan=${plan}`,
-      cancel_url: `${process.env.APP_URL || 'https://financial-forecaster-console-1.onrender.com'}/paywall.html`,
+      success_url: `${APP_URL}/payment-success.html?plan=${plan}`,
+      cancel_url: `${APP_URL}/paywall.html`,
       metadata: { userId: req.session.userId.toString(), plan },
     });
-
     res.json({ url: session.url });
   } catch (err) {
     console.error('Checkout error full details:', {
-      message: err.message,
-      type: err.type,
-      code: err.code,
-      param: err.param,
-      statusCode: err.statusCode,
-      rawType: err.rawType,
+      message: err.message, type: err.type, code: err.code,
+      param: err.param, statusCode: err.statusCode, rawType: err.rawType,
     });
     res.status(500).json({ error: 'Could not create checkout session.' });
   }
 });
 
-// Stripe webhook — handles payment confirmation
+// Grant access helper
+async function grantSubscriptionAccess(userId, plan) {
+  if (plan === 'monthly') {
+    const accessExpiresAt = new Date(Date.now() + 32 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      `UPDATE users SET subscription_status='active', subscription_plan='monthly', access_expires_at=$1 WHERE id=$2`,
+      [accessExpiresAt, userId]
+    );
+  } else if (plan === 'annual') {
+    const accessExpiresAt = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000);
+    await pool.query(
+      `UPDATE users SET subscription_status='active', subscription_plan='annual', access_expires_at=$1 WHERE id=$2`,
+      [accessExpiresAt, userId]
+    );
+  } else {
+    // lifetime or founding
+    await pool.query(
+      `UPDATE users SET subscription_status='lifetime', subscription_plan=$1, access_expires_at=NULL WHERE id=$2`,
+      [plan, userId]
+    );
+  }
+}
+
 app.post('/api/stripe/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
   let event;
-
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
   } catch (err) {
     console.error('Webhook error:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
-
   try {
     if (event.type === 'checkout.session.completed') {
       const session = event.data.object;
       const userId = parseInt(session.metadata.userId);
       const plan = session.metadata.plan;
-
-      if (plan === 'monthly' || plan === 'annual') {
-        const accessDays = plan === 'monthly' ? 31 : 366;
-        const accessExpiresAt = new Date(Date.now() + accessDays * 24 * 60 * 60 * 1000);
-        await pool.query(
-          `UPDATE users SET subscription_status='active', subscription_plan=$1,
-           stripe_subscription_id=$2, access_expires_at=$3 WHERE id=$4`,
-          [plan, session.subscription, accessExpiresAt, userId]
-        );
-      } else {
-        // Lifetime or founding
-        await pool.query(
-          `UPDATE users SET subscription_status='lifetime', subscription_plan=$1,
-           access_expires_at=NULL WHERE id=$2`,
-          [plan, userId]
-        );
-      }
+      await grantSubscriptionAccess(userId, plan);
+      console.log(`Access granted: userId=${userId} plan=${plan}`);
     }
-
     if (event.type === 'invoice.payment_succeeded') {
       const invoice = event.data.object;
       if (invoice.subscription) {
         const sub = await stripe.subscriptions.retrieve(invoice.subscription);
-        const userId = parseInt(sub.metadata.userId || '0');
+        const userId = parseInt(sub.metadata?.userId || '0');
         if (userId) {
-          const plan = sub.metadata.plan;
-          const accessDays = plan === 'monthly' ? 31 : 366;
-          const accessExpiresAt = new Date(Date.now() + accessDays * 24 * 60 * 60 * 1000);
-          await pool.query(
-            `UPDATE users SET subscription_status='active', access_expires_at=$1 WHERE id=$2`,
-            [accessExpiresAt, userId]
-          );
+          const plan = sub.metadata?.plan || 'monthly';
+          await grantSubscriptionAccess(userId, plan);
         }
       }
     }
-
     if (event.type === 'customer.subscription.deleted') {
       const sub = event.data.object;
       await pool.query(
@@ -394,8 +345,52 @@ app.post('/api/stripe/webhook', async (req, res) => {
   } catch (err) {
     console.error('Webhook processing error:', err);
   }
-
   res.json({ received: true });
+});
+
+// ---------- GUMROAD WEBHOOK ----------
+// Gumroad sends a POST ping when a sale is made
+app.post('/api/gumroad/webhook', async (req, res) => {
+  try {
+    const { email, product_name, sale_id } = req.body;
+    if (!email) return res.status(400).json({ error: 'No email provided' });
+
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    // Detect plan from product name
+    let plan = 'monthly';
+    const name = (product_name || '').toLowerCase();
+    if (name.includes('founding')) plan = 'founding';
+    else if (name.includes('lifetime')) plan = 'lifetime';
+    else if (name.includes('annual') || name.includes('yearly')) plan = 'annual';
+    else if (name.includes('monthly')) plan = 'monthly';
+
+    // Find user by email
+    let userResult = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+
+    if (userResult.rows.length === 0) {
+      // User hasn't signed up yet — create a pending account
+      // They'll set their password when they click the access link
+      const tempPassword = await bcrypt.hash(sale_id || Math.random().toString(36), 12);
+      const result = await pool.query(
+        `INSERT INTO users (email, password_hash, created_at, subscription_status, subscription_plan)
+         VALUES ($1, $2, NOW(), 'pending', $3) RETURNING id`,
+        [normalizedEmail, tempPassword, plan]
+      );
+      await pool.query('INSERT INTO user_data (user_id, data) VALUES ($1, $2)', [result.rows[0].id, JSON.stringify({})]);
+      userResult = { rows: [{ id: result.rows[0].id }] };
+      console.log(`Gumroad: New user created for ${normalizedEmail}`);
+    }
+
+    const userId = userResult.rows[0].id;
+    await grantSubscriptionAccess(userId, plan);
+    console.log(`Gumroad: Access granted to ${normalizedEmail} plan=${plan}`);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Gumroad webhook error:', err);
+    res.status(500).json({ error: 'Webhook processing failed' });
+  }
 });
 
 // ---------- ADMIN ----------
@@ -435,21 +430,16 @@ app.get('/api/admin/users', requireAdmin, async (req, res) => {
   }
 });
 
-// Grant manual access (admin can override for beta testers)
 app.post('/api/admin/grant-access', requireAdmin, async (req, res) => {
   const { userId, plan } = req.body;
   try {
-    await pool.query(
-      `UPDATE users SET subscription_status='lifetime', subscription_plan=$1 WHERE id=$2`,
-      [plan || 'beta', userId]
-    );
+    await grantSubscriptionAccess(userId, plan || 'lifetime');
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ error: 'Could not grant access.' });
   }
 });
 
-// Extend trial (admin)
 app.post('/api/admin/extend-trial', requireAdmin, async (req, res) => {
   const { userId, days } = req.body;
   try {
