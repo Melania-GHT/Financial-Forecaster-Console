@@ -326,11 +326,15 @@ app.post('/api/signup', async (req, res) => {
     await pool.query('INSERT INTO user_data (user_id, data) VALUES ($1, $2)', [userId, JSON.stringify({})]);
     req.session.userId = userId;
     req.session.email = normalizedEmail;
-    req.session.save((err) => {
+    req.session.save(async (err) => {
       if (err) return res.status(500).json({ error: 'Account created but session failed. Please log in.' });
-      // Send welcome email
-      sendEmail(normalizedEmail, 'Welcome to The Clarity Console™ — your 4-day trial starts now!', `
-<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
+      res.json({ ok: true, email: normalizedEmail, trialDays: TRIAL_DAYS });
+      // Send welcome email after response (non-blocking)
+      try {
+        await sendEmail(
+          normalizedEmail,
+          'Welcome to The Clarity Console™ — your 4-day trial starts now!',
+          `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
 <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
   <div style="background:#1f3148;padding:28px 32px;">
     <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
@@ -351,8 +355,11 @@ app.post('/api/signup', async (req, res) => {
     © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.
   </div>
 </div>
-</body></html>`);
-      res.json({ ok: true, email: normalizedEmail, trialDays: TRIAL_DAYS });
+</body></html>`
+        );
+      } catch (emailErr) {
+        console.error('Welcome email error:', emailErr.message);
+      }
     });
   } catch (err) {
     console.error('Signup error:', err);
