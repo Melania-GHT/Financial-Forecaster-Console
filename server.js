@@ -664,7 +664,23 @@ app.post('/api/admin/extend-trial', requireAdmin, async (req, res) => {
   }
 });
 
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+// Test email endpoint — admin only
+app.get('/api/admin/test-email', requireAdmin, async (req, res) => {
+  const testTo = req.query.to || 'info@e-servicesbymel.com';
+  try {
+    const result = await resend.emails.send({
+      from: `E-SERVICES BY MEL <${FROM_EMAIL}>`,
+      to: testTo,
+      subject: 'Test email from Clarity Console',
+      html: '<p>This is a test email from The Clarity Console™. If you received this, email sending is working correctly!</p>'
+    });
+    console.log('Test email result:', JSON.stringify(result));
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('Test email error:', err);
+    res.status(500).json({ error: err.message, details: err });
+  }
+});
 app.get('/paywall', (req, res) => res.sendFile(path.join(__dirname, 'public', 'paywall.html')));
 app.get('/payment-success', (req, res) => res.sendFile(path.join(__dirname, 'public', 'payment-success.html')));
 
