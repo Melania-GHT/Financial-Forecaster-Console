@@ -8,6 +8,10 @@ const path = require('path');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
   apiVersion: '2026-06-24.dahlia',
 });
+const { Resend } = require('resend');
+const resend = new Resend(process.env.RESEND_API_KEY);
+const FROM_EMAIL = 'info@e-servicesbymel.com';
+const APP_URL = process.env.APP_URL || 'https://financial-forecaster-console-3.onrender.com';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -29,7 +33,190 @@ const PRICES = {
 
 const TRIAL_DAYS = 4;
 const FOUNDING_MEMBER_LIMIT = 50;
-const APP_URL = process.env.APP_URL || 'https://financial-forecaster-console-3.onrender.com';
+
+// ---------- EMAIL FUNCTIONS ----------
+
+async function sendEmail(to, subject, html) {
+  if (!process.env.RESEND_API_KEY) {
+    console.log('Email skipped — no RESEND_API_KEY:', subject, 'to', to);
+    return;
+  }
+  try {
+    await resend.emails.send({
+      from: `E-SERVICES BY MEL <${FROM_EMAIL}>`,
+      to,
+      subject,
+      html,
+    });
+    console.log(`Email sent: "${subject}" to ${to}`);
+  } catch (err) {
+    console.error('Email send error:', err.message);
+  }
+}
+
+function trialExpiryReminderHTML(email, daysLeft) {
+  const urgencyColor = daysLeft <= 1 ? '#a8503e' : '#c8862b';
+  const urgencyText = daysLeft <= 1 ? 'expires TODAY' : 'expires TOMORROW';
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:#1f3148;padding:28px 32px;">
+      <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:1px;">E-SERVICES BY MEL™</div>
+    </div>
+    <div style="padding:32px;">
+      <div style="background:${urgencyColor};color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">
+        ⏰ Your free trial ${urgencyText}
+      </div>
+      <h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Don't lose your financial clarity.</h2>
+      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">
+        Your 4-day free trial of The Clarity Console™ ${urgencyText}. 
+        After your trial ends, you'll lose access to all 8 tools, your saved data, and the QuickBooks import feature.
+      </p>
+      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        The good news — upgrading takes less than 2 minutes and your data stays saved.
+      </p>
+      <div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">
+        <div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Choose your plan:</div>
+        <table style="width:100%;border-collapse:collapse;">
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #e3ddd0;">
+              <span style="font-weight:600;color:#1f3148;">⭐ Founding Member</span>
+              <span style="font-size:12px;color:#c8862b;margin-left:8px;">First 50 only</span>
+            </td>
+            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;border-bottom:1px solid #e3ddd0;">$297 lifetime</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #e3ddd0;"><span style="font-weight:600;color:#1f3148;">Annual</span></td>
+            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;border-bottom:1px solid #e3ddd0;">$249/year</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;border-bottom:1px solid #e3ddd0;"><span style="font-weight:600;color:#1f3148;">Lifetime</span></td>
+            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;border-bottom:1px solid #e3ddd0;">$497 once</td>
+          </tr>
+          <tr>
+            <td style="padding:8px 0;"><span style="font-weight:600;color:#1f3148;">Monthly</span></td>
+            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;">$47/month</td>
+          </tr>
+        </table>
+      </div>
+      <a href="${APP_URL}/paywall.html" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">
+        Choose My Plan →
+      </a>
+      <p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">
+        Questions? Reply to this email — we're here to help.<br>
+        <a href="${APP_URL}" style="color:#c8862b;">Go to my dashboard</a>
+      </p>
+    </div>
+    <div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;border-top:1px solid #e3ddd0;">
+      © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.<br>
+      You're receiving this because you signed up for a free trial at The Clarity Console™.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+function subscriptionExpiryReminderHTML(email, daysLeft, plan) {
+  const planLabel = plan === 'monthly' ? 'Monthly' : plan === 'annual' ? 'Annual' : plan;
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
+<body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
+  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:#1f3148;padding:28px 32px;">
+      <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
+      <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:1px;">E-SERVICES BY MEL™</div>
+    </div>
+    <div style="padding:32px;">
+      <div style="background:#c8862b;color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">
+        ⏰ Your ${planLabel} subscription expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}
+      </div>
+      <h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Time to renew your access.</h2>
+      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">
+        Your ${planLabel} subscription to The Clarity Console™ expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. 
+        Renew now to keep uninterrupted access to all your tools and saved data.
+      </p>
+      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">
+        Want to save money? Consider upgrading to an Annual or Lifetime plan.
+      </p>
+      <a href="${APP_URL}/paywall.html" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">
+        Renew My Access →
+      </a>
+      <p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">
+        Questions? Reply to this email — we're here to help.<br>
+        <a href="${APP_URL}" style="color:#c8862b;">Go to my dashboard</a>
+      </p>
+    </div>
+    <div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;border-top:1px solid #e3ddd0;">
+      © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.
+    </div>
+  </div>
+</body>
+</html>`;
+}
+
+// Daily job — check for expiring accounts and send reminders
+async function sendExpiryReminders() {
+  console.log('Running daily expiry reminder check...');
+  try {
+    // Trial users expiring in 1 day
+    const trialExpiring1Day = await pool.query(`
+      SELECT id, email, trial_ends_at FROM users
+      WHERE subscription_status = 'trial'
+      AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '25 hours'
+      AND trial_ends_at > NOW()
+    `);
+    for (const user of trialExpiring1Day.rows) {
+      await sendEmail(
+        user.email,
+        '⏰ Your Clarity Console trial expires today',
+        trialExpiryReminderHTML(user.email, 1)
+      );
+    }
+
+    // Trial users expiring in 2 days
+    const trialExpiring2Days = await pool.query(`
+      SELECT id, email, trial_ends_at FROM users
+      WHERE subscription_status = 'trial'
+      AND trial_ends_at BETWEEN NOW() + INTERVAL '25 hours' AND NOW() + INTERVAL '49 hours'
+    `);
+    for (const user of trialExpiring2Days.rows) {
+      await sendEmail(
+        user.email,
+        '⏰ Your Clarity Console trial expires tomorrow',
+        trialExpiryReminderHTML(user.email, 2)
+      );
+    }
+
+    // Paid subscribers expiring in 3 days
+    const paidExpiring3Days = await pool.query(`
+      SELECT id, email, subscription_plan, access_expires_at FROM users
+      WHERE subscription_status = 'active'
+      AND access_expires_at BETWEEN NOW() + INTERVAL '2 days' AND NOW() + INTERVAL '4 days'
+    `);
+    for (const user of paidExpiring3Days.rows) {
+      await sendEmail(
+        user.email,
+        `Your Clarity Console ${user.subscription_plan} subscription expires in 3 days`,
+        subscriptionExpiryReminderHTML(user.email, 3, user.subscription_plan)
+      );
+    }
+
+    console.log(`Reminders sent: ${trialExpiring1Day.rows.length + trialExpiring2Days.rows.length + paidExpiring3Days.rows.length} emails`);
+  } catch (err) {
+    console.error('Expiry reminder error:', err);
+  }
+}
+
+// Run reminder check every 24 hours
+setInterval(sendExpiryReminders, 24 * 60 * 60 * 1000);
+// Also run once on startup after 5 minutes
+setTimeout(sendExpiryReminders, 5 * 60 * 1000);
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -141,6 +328,30 @@ app.post('/api/signup', async (req, res) => {
     req.session.email = normalizedEmail;
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Account created but session failed. Please log in.' });
+      // Send welcome email
+      sendEmail(normalizedEmail, 'Welcome to The Clarity Console™ — your 4-day trial starts now!', `
+<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
+<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+  <div style="background:#1f3148;padding:28px 32px;">
+    <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
+    <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:1px;">E-SERVICES BY MEL™</div>
+  </div>
+  <div style="padding:32px;">
+    <h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Welcome! Your 4-day free trial starts now. 🎉</h2>
+    <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">You now have full access to The Clarity Console™ — 8 financial clarity tools that translate your business numbers into plain English.</p>
+    <div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">
+      <div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Start here:</div>
+      <p style="color:#4a5568;font-size:14px;margin:0 0 8px;">📥 <strong>If you use QuickBooks</strong> — click "Import from QuickBooks" in the sidebar, export any report as CSV, and upload it. Your fields populate automatically.</p>
+      <p style="color:#4a5568;font-size:14px;margin:0;">💡 <strong>If you don't use QuickBooks</strong> — start with Tool 1: Cash Truth Check. Just 5 numbers and you'll instantly see where your cash is going.</p>
+    </div>
+    <a href="${APP_URL}" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Go to My Dashboard →</a>
+    <p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">Your trial ends in 4 days. Questions? Reply to this email.</p>
+  </div>
+  <div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;border-top:1px solid #e3ddd0;">
+    © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.
+  </div>
+</div>
+</body></html>`);
       res.json({ ok: true, email: normalizedEmail, trialDays: TRIAL_DAYS });
     });
   } catch (err) {
