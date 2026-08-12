@@ -800,45 +800,69 @@
 
   // ---- 6. FINANCIAL HEALTH SCORE ----
   function calcHealthScore(data) {
-    var score = 50; // baseline
+    var score = 0; // start from 0, build up
     var factors = [];
     var truth = data.truth || {};
     var pnl = data.pnl || {};
-    var breakeven = data.breakeven || {};
     var rev = Number(truth.revenue || pnl.revenue) || 0;
     var exp = Number(truth.expenses || pnl.opex) || 0;
     var bank = Number(truth.bank) || 0;
     var ar = Number(truth.ar) || 0;
     var ap = Number(truth.ap) || 0;
     var cogs = Number(pnl.cogs) || 0;
-    // Profit margin
+    var hasData = rev > 0 || bank > 0;
+
+    if (!hasData) {
+      return { score: 0, grade: 'No Data', color: C.line, factors: [{text: 'Enter your numbers above to see your score', positive: false}] };
+    }
+
+    // Factor 1: Profit margin (0-35 points)
     if (rev > 0) {
       var margin = ((rev - exp - cogs) / rev) * 100;
-      if (margin >= 20) { score += 15; factors.push({text: 'Strong profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
-      else if (margin >= 10) { score += 8; factors.push({text: 'Healthy profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
-      else if (margin >= 0) { score += 0; factors.push({text: 'Thin profit margin ('+margin.toFixed(0)+'%) — room to improve', positive: false}); }
-      else { score -= 15; factors.push({text: 'Negative profit margin — expenses exceed revenue', positive: false}); }
-    }
-    // Cash vs expenses
+      if (margin >= 25) { score += 35; factors.push({text: 'Excellent profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 15) { score += 28; factors.push({text: 'Strong profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 8) { score += 20; factors.push({text: 'Healthy profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 0) { score += 10; factors.push({text: 'Thin profit margin ('+margin.toFixed(0)+'%) — room to improve', positive: false}); }
+      else { score += 0; factors.push({text: 'Negative margin ('+margin.toFixed(0)+'%) — expenses exceed revenue', positive: false}); }
+    } else { score += 15; } // no revenue data, neutral
+
+    // Factor 2: Cash runway (0-30 points)
     if (bank > 0 && exp > 0) {
-      var runway = bank / (exp/30);
-      if (runway >= 90) { score += 15; factors.push({text: 'Strong cash runway ('+Math.round(runway)+' days)', positive: true}); }
-      else if (runway >= 30) { score += 8; factors.push({text: 'Adequate cash runway ('+Math.round(runway)+' days)', positive: true}); }
-      else { score -= 10; factors.push({text: 'Low cash runway ('+Math.round(runway)+' days) — watch closely', positive: false}); }
-    }
-    // AR vs AP ratio
+      var runway = bank / (exp / 30);
+      if (runway >= 180) { score += 30; factors.push({text: 'Excellent cash runway ('+Math.round(runway/30)+' months)', positive: true}); }
+      else if (runway >= 90) { score += 24; factors.push({text: 'Strong cash runway ('+Math.round(runway)+' days)', positive: true}); }
+      else if (runway >= 45) { score += 16; factors.push({text: 'Adequate cash runway ('+Math.round(runway)+' days)', positive: true}); }
+      else if (runway >= 20) { score += 8; factors.push({text: 'Low cash runway ('+Math.round(runway)+' days) — monitor closely', positive: false}); }
+      else { score += 0; factors.push({text: 'Critical cash runway ('+Math.round(runway)+' days) — act now', positive: false}); }
+    } else if (bank > 0) { score += 20; } // has cash, no expense data
+
+    // Factor 3: Receivables vs Payables (0-20 points)
     if (ar > 0 || ap > 0) {
-      if (ar > ap) { score += 5; factors.push({text: 'More owed to you than you owe', positive: true}); }
-      else if (ap > ar * 1.5) { score -= 8; factors.push({text: 'High payables vs receivables — cash pressure ahead', positive: false}); }
+      var ratio = ap > 0 ? ar / ap : 2;
+      if (ratio >= 2) { score += 20; factors.push({text: 'Strong: you\'re owed 2x more than you owe', positive: true}); }
+      else if (ratio >= 1) { score += 14; factors.push({text: 'Healthy: more owed to you than you owe', positive: true}); }
+      else if (ratio >= 0.5) { score += 7; factors.push({text: 'Watch: payables are catching up to receivables', positive: false}); }
+      else { score += 0; factors.push({text: 'High payables vs receivables — cash pressure ahead', positive: false}); }
+    } else { score += 14; } // no AR/AP data, neutral
+
+    // Factor 4: Revenue covers costs (0-15 points)
+    if (rev > 0 && (exp > 0 || cogs > 0)) {
+      var totalCosts = exp + cogs;
+      var coverageRatio = rev / totalCosts;
+      if (coverageRatio >= 1.3) { score += 15; factors.push({text: 'Revenue is 30%+ above total costs', positive: true}); }
+      else if (coverageRatio >= 1.1) { score += 10; factors.push({text: 'Revenue comfortably covers costs', positive: true}); }
+      else if (coverageRatio >= 1.0) { score += 5; factors.push({text: 'Revenue just covers costs — thin cushion', positive: false}); }
+      else { score += 0; factors.push({text: 'Revenue not covering total costs', positive: false}); }
     }
-    // Revenue vs expenses
-    if (rev > 0 && exp > 0) {
-      if (rev > exp + cogs) { score += 10; factors.push({text: 'Revenue covers all costs', positive: true}); }
-      else { score -= 5; factors.push({text: 'Revenue not yet covering all costs', positive: false}); }
-    }
+
     score = Math.max(0, Math.min(100, score));
-    var grade = score >= 80 ? 'Excellent' : score >= 65 ? 'Good' : score >= 50 ? 'Fair' : score >= 35 ? 'Needs Attention' : 'Critical';
-    var color = score >= 80 ? C.good : score >= 65 ? C.sage : score >= 50 ? C.watch : score >= 35 ? C.amber : C.danger;
+    var grade, color;
+    if (score >= 85) { grade = 'Excellent'; color = C.good; }
+    else if (score >= 70) { grade = 'Good'; color = C.sage; }
+    else if (score >= 55) { grade = 'Fair'; color = C.watch; }
+    else if (score >= 35) { grade = 'Needs Attention'; color = C.amber; }
+    else { grade = 'Critical'; color = C.danger; }
+
     return { score: score, grade: grade, color: color, factors: factors.slice(0,4) };
   }
 
