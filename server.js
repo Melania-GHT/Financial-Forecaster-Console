@@ -330,6 +330,7 @@ app.post('/api/signup', async (req, res) => {
       if (err) return res.status(500).json({ error: 'Account created but session failed. Please log in.' });
       res.json({ ok: true, email: normalizedEmail, trialDays: TRIAL_DAYS });
       // Send welcome email after response (non-blocking)
+      console.log(`Attempting welcome email to: ${normalizedEmail}`);
       try {
         await sendEmail(
           normalizedEmail,
