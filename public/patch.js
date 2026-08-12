@@ -148,6 +148,7 @@
       window._patchTimer = setTimeout(function() {
         var el = document.getElementById('tool-result');
         if (el && typeof window.renderResultOnly === 'function') window.renderResultOnly();
+        setTimeout(function(){ if(window._injectCharts) window._injectCharts(); }, 400);
       }, 50);
     }, true);
 
@@ -161,6 +162,7 @@
       window._patchTimer = setTimeout(function() {
         var el = document.getElementById('tool-result');
         if (el && typeof window.renderResultOnly === 'function') window.renderResultOnly();
+        setTimeout(function(){ if(window._injectCharts) window._injectCharts(); }, 400);
       }, 100);
     }, true);
 
@@ -1125,6 +1127,9 @@
     }
   }
 
+  // Expose injectCharts globally so it can be called from patch
+  window._injectCharts = injectCharts;
+
   // Watch for result panel updates and inject charts
   function watchForResults() {
     if (!window._patchApplied) { setTimeout(watchForResults, 200); return; }
@@ -1132,9 +1137,28 @@
     if (!toolContainer) { setTimeout(watchForResults, 200); return; }
     var chartObserver = new MutationObserver(function(mutations) {
       var hasNew = mutations.some(function(m) { return m.addedNodes.length > 0 || m.type === 'characterData'; });
-      if (hasNew) setTimeout(injectCharts, 100);
+      if (hasNew) setTimeout(injectCharts, 300);
     });
     chartObserver.observe(toolContainer, { childList: true, subtree: true, characterData: true });
+
+    // Also hook into renderResultOnly if available
+    var origRenderResultOnly = window.renderResultOnly;
+    if (typeof origRenderResultOnly === 'function') {
+      window.renderResultOnly = function() {
+        origRenderResultOnly();
+        setTimeout(injectCharts, 200);
+      };
+    }
+
+    // Hook into renderResultFromWorker if available
+    var origRenderFromWorker = window.renderResultFromWorker;
+    if (typeof origRenderFromWorker === 'function') {
+      window.renderResultFromWorker = function(result) {
+        origRenderFromWorker(result);
+        setTimeout(injectCharts, 200);
+      };
+    }
+
     console.log('[charts] Chart system initialized');
   }
   watchForResults();
