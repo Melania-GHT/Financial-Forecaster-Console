@@ -799,18 +799,75 @@
   }
 
   // ---- 6. FINANCIAL HEALTH SCORE ----
-  function calcHealthScore(data) {
-    var score = 0; // start from 0, build up
+  function getFieldValue(tool, key) {
+    var input = document.querySelector('.tool-input[data-tool="'+tool+'"][data-key="'+key+'"]');
+    return input ? Number(input.value) || 0 : 0;
+  }
+
+  function calcHealthScore() {
+    var rev  = getFieldValue('truth','revenue') || getFieldValue('pnl','revenue');
+    var exp  = getFieldValue('truth','expenses') || getFieldValue('pnl','opex');
+    var bank = getFieldValue('truth','bank');
+    var ar   = getFieldValue('truth','ar');
+    var ap   = getFieldValue('truth','ap');
+    var cogs = getFieldValue('pnl','cogs');
+    var score = 0;
     var factors = [];
-    var truth = data.truth || {};
-    var pnl = data.pnl || {};
-    var rev = Number(truth.revenue || pnl.revenue) || 0;
-    var exp = Number(truth.expenses || pnl.opex) || 0;
-    var bank = Number(truth.bank) || 0;
-    var ar = Number(truth.ar) || 0;
-    var ap = Number(truth.ap) || 0;
-    var cogs = Number(pnl.cogs) || 0;
     var hasData = rev > 0 || bank > 0;
+
+    if (!hasData) {
+      return { score: 0, grade: 'No Data', color: C.line, factors: [{text: 'Enter your numbers above to see your score', positive: false}] };
+    }
+
+    // Factor 1: Profit margin (0-35 points)
+    if (rev > 0) {
+      var margin = ((rev - exp - cogs) / rev) * 100;
+      if (margin >= 25) { score += 35; factors.push({text: 'Excellent profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 15) { score += 28; factors.push({text: 'Strong profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 8) { score += 20; factors.push({text: 'Healthy profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 0) { score += 10; factors.push({text: 'Thin profit margin ('+margin.toFixed(0)+'%) — room to improve', positive: false}); }
+      else { score += 0; factors.push({text: 'Negative margin ('+margin.toFixed(0)+'%) — expenses exceed revenue', positive: false}); }
+    } else { score += 15; }
+
+    // Factor 2: Cash runway (0-30 points)
+    if (bank > 0 && exp > 0) {
+      var runway = bank / (exp / 30);
+      if (runway >= 180) { score += 30; factors.push({text: 'Excellent cash runway ('+Math.round(runway/30)+' months)', positive: true}); }
+      else if (runway >= 90) { score += 24; factors.push({text: 'Strong cash runway ('+Math.round(runway)+' days)', positive: true}); }
+      else if (runway >= 45) { score += 16; factors.push({text: 'Adequate cash runway ('+Math.round(runway)+' days)', positive: true}); }
+      else if (runway >= 20) { score += 8; factors.push({text: 'Low cash runway ('+Math.round(runway)+' days) — monitor closely', positive: false}); }
+      else { score += 0; factors.push({text: 'Critical cash runway ('+Math.round(runway)+' days) — act now', positive: false}); }
+    } else if (bank > 0) { score += 20; }
+
+    // Factor 3: Receivables vs Payables (0-20 points)
+    if (ar > 0 || ap > 0) {
+      var ratio = ap > 0 ? ar / ap : 2;
+      if (ratio >= 2) { score += 20; factors.push({text: 'Strong: you\'re owed 2x more than you owe', positive: true}); }
+      else if (ratio >= 1) { score += 14; factors.push({text: 'Healthy: more owed to you than you owe', positive: true}); }
+      else if (ratio >= 0.5) { score += 7; factors.push({text: 'Watch: payables are catching up to receivables', positive: false}); }
+      else { score += 0; factors.push({text: 'High payables vs receivables — cash pressure ahead', positive: false}); }
+    } else { score += 14; }
+
+    // Factor 4: Revenue covers costs (0-15 points)
+    if (rev > 0 && (exp > 0 || cogs > 0)) {
+      var totalCosts = exp + cogs;
+      var coverageRatio = rev / Math.max(totalCosts, 1);
+      if (coverageRatio >= 1.3) { score += 15; factors.push({text: 'Revenue is 30%+ above total costs', positive: true}); }
+      else if (coverageRatio >= 1.1) { score += 10; factors.push({text: 'Revenue comfortably covers costs', positive: true}); }
+      else if (coverageRatio >= 1.0) { score += 5; factors.push({text: 'Revenue just covers costs — thin cushion', positive: false}); }
+      else { score += 0; factors.push({text: 'Revenue not covering total costs', positive: false}); }
+    }
+
+    score = Math.max(0, Math.min(100, score));
+    var grade, color;
+    if (score >= 85) { grade = 'Excellent'; color = C.good; }
+    else if (score >= 70) { grade = 'Good'; color = C.sage; }
+    else if (score >= 55) { grade = 'Fair'; color = C.watch; }
+    else if (score >= 35) { grade = 'Needs Attention'; color = C.amber; }
+    else { grade = 'Critical'; color = C.danger; }
+
+    return { score: score, grade: grade, color: color, factors: factors.slice(0,4) };
+  }
 
     if (!hasData) {
       return { score: 0, grade: 'No Data', color: C.line, factors: [{text: 'Enter your numbers above to see your score', positive: false}] };
@@ -961,16 +1018,15 @@
   // ---- Inject charts into tool result panels ----
   function injectCharts() {
     var tab = getActiveTab();
-    var cData = window.currentData || {};
-
     if (tab === 'tracker') {
       var resultEl = document.querySelector('#tool-container .result');
       if (resultEl && !resultEl.querySelector('.chart-injected')) {
+        var trackerData = window.currentData && window.currentData.tracker ? window.currentData.tracker : null;
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
         chartDiv.style.cssText = 'margin-top:20px;padding-top:16px;border-top:1px solid #e3ddd0;';
         chartDiv.innerHTML = '<div style="font-size:12px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:12px;">Spending Breakdown</div>'
-          + renderSpendingPie(cData.tracker);
+          + renderSpendingPie(trackerData);
         resultEl.appendChild(chartDiv);
       }
     }
@@ -978,8 +1034,9 @@
     if (tab === 'pnl') {
       var resultEl = document.getElementById('tool-result');
       if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
-        var d = cData.pnl || {};
-        var rev = Number(d.revenue)||0, cogs = Number(d.cogs)||0, opex = Number(d.opex)||0;
+        var rev = getFieldValue('pnl','revenue');
+        var cogs = getFieldValue('pnl','cogs');
+        var opex = getFieldValue('pnl','opex');
         var net = rev - cogs - opex;
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
@@ -993,9 +1050,9 @@
     if (tab === 'truth') {
       var resultEl = document.getElementById('tool-result');
       if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
-        var d = cData.truth || {};
-        var rev = Number(d.revenue)||0, exp = Number(d.expenses)||0, bank = Number(d.bank)||0;
-        var health = calcHealthScore(cData);
+        var health = calcHealthScore();
+        var bank = getFieldValue('truth','bank');
+        var exp  = getFieldValue('truth','expenses');
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
         chartDiv.style.cssText = 'margin-top:20px;';
@@ -1010,10 +1067,10 @@
     if (tab === 'breakeven') {
       var resultEl = document.getElementById('tool-result');
       if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
-        var d = cData.breakeven || {};
-        var pnlD = cData.pnl || {};
-        var fixed = Number(d.fixed)||0, price = Number(d.price)||0, cost = Number(d.cost)||0;
-        var rev = Number(pnlD.revenue || (cData.truth||{}).revenue)||0;
+        var fixed = getFieldValue('breakeven','fixed');
+        var price = getFieldValue('breakeven','price');
+        var cost  = getFieldValue('breakeven','cost');
+        var rev   = getFieldValue('pnl','revenue') || getFieldValue('truth','revenue');
         var gm = price > 0 ? ((price-cost)/price)*100 : 60;
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
@@ -1029,10 +1086,9 @@
     if (tab === 'forecast') {
       var resultEl = document.getElementById('tool-result');
       if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
-        var d = cData.forecast || {};
-        var tD = cData.truth || {};
-        var bank = Number(tD.bank)||0;
-        var income = Number(d.income)||0, expF = Number(d.expenses)||0;
+        var bank   = getFieldValue('truth','bank');
+        var income = getFieldValue('forecast','income');
+        var expF   = getFieldValue('forecast','expenses');
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
         chartDiv.style.cssText = 'margin-top:20px;';
@@ -1040,9 +1096,9 @@
         if (fcContent) {
           chartDiv.innerHTML = '<div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">90-Day Cash Forecast</div>' + fcContent;
           // What-if scenarios
-          var rev = Number((cData.pnl||{}).revenue || tD.revenue)||0;
-          var exp = Number((cData.pnl||{}).opex || tD.expenses)||0;
-          var cogs = Number((cData.pnl||{}).cogs)||0;
+          var rev  = getFieldValue('pnl','revenue') || getFieldValue('truth','revenue');
+          var exp  = getFieldValue('pnl','opex') || getFieldValue('truth','expenses');
+          var cogs = getFieldValue('pnl','cogs');
           if (rev > 0) {
             chartDiv.innerHTML += '<div style="margin-top:16px;"><div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">What-If Scenarios</div>'
               + renderWhatIf(rev, exp, cogs) + '</div>';
@@ -1055,8 +1111,8 @@
     if (tab === 'snapshot') {
       var resultEl = document.getElementById('tool-result');
       if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
-        var d = cData.snapshot || {};
-        var rev = Number(d.revenue)||0, exp = Number(d.expenses)||0;
+        var rev = getFieldValue('snapshot','revenue') || getFieldValue('truth','revenue');
+        var exp = getFieldValue('snapshot','expenses') || getFieldValue('truth','expenses');
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
         chartDiv.style.cssText = 'margin-top:20px;';
