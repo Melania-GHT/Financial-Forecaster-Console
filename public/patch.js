@@ -157,6 +157,10 @@
       var input = e.target;
       if (!input || input.tagName !== 'INPUT') return;
       if (input.closest('#login-screen')) return;
+      // Always cache field values when leaving any input
+      if (input.classList.contains('tool-input') && input.value && input.dataset.tool && input.dataset.key) {
+        try { sessionStorage.setItem('clarity_field_'+input.dataset.tool+'_'+input.dataset.key, input.value); } catch(e) {}
+      }
       if (getActiveTab() === 'tracker') return;
       clearTimeout(window._patchTimer);
       window._patchTimer = setTimeout(function() {
@@ -810,8 +814,25 @@
 
   // ---- 6. FINANCIAL HEALTH SCORE ----
   function getFieldValue(tool, key) {
+    // First try current DOM inputs
     var input = document.querySelector('.tool-input[data-tool="'+tool+'"][data-key="'+key+'"]');
-    return input ? Number(input.value) || 0 : 0;
+    if (input && input.value) return Number(input.value) || 0;
+    // Fall back to cached values from sessionStorage
+    try {
+      var cached = sessionStorage.getItem('clarity_field_'+tool+'_'+key);
+      return cached ? Number(cached) || 0 : 0;
+    } catch(e) { return 0; }
+  }
+
+  // Cache field values as user types so they're available across tools
+  function cacheFieldValues() {
+    document.querySelectorAll('.tool-input').forEach(function(input) {
+      if (input.value && input.dataset.tool && input.dataset.key) {
+        try {
+          sessionStorage.setItem('clarity_field_'+input.dataset.tool+'_'+input.dataset.key, input.value);
+        } catch(e) {}
+      }
+    });
   }
 
   function calcHealthScore() {
@@ -1093,7 +1114,10 @@
     if (!toolContainer) { setTimeout(watchForResults, 200); return; }
     var chartObserver = new MutationObserver(function(mutations) {
       var hasNew = mutations.some(function(m) { return m.addedNodes.length > 0 || m.type === 'characterData'; });
-      if (hasNew) setTimeout(injectCharts, 300);
+      if (hasNew) {
+        cacheFieldValues();
+        setTimeout(injectCharts, 300);
+      }
     });
     chartObserver.observe(toolContainer, { childList: true, subtree: true, characterData: true });
 
