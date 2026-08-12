@@ -588,7 +588,14 @@
 // ============================================================
 (function() {
 
-  // ---- Chart Colors (brand palette) ----
+  // Local copy of getActiveTab for this scope
+  function getActiveTab() {
+    var active = document.querySelector('.nav-item.active');
+    if (!active) return null;
+    var onclick = active.getAttribute('onclick') || '';
+    var match = onclick.match(/goTo\('(\w+)'\)/);
+    return match ? match[1] : null;
+  }
   var C = {
     navy:    '#1f3148',
     amber:   '#c8862b',
