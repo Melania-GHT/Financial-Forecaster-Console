@@ -582,3 +582,474 @@
   init();
 
 })();
+
+// ============================================================
+// CHARTS & DATA VISUALIZATIONS
+// ============================================================
+(function() {
+
+  // ---- Chart Colors (brand palette) ----
+  var C = {
+    navy:    '#1f3148',
+    amber:   '#c8862b',
+    sage:    '#5c7a5e',
+    rust:    '#a8503e',
+    paper:   '#f7f4ee',
+    line:    '#e3ddd0',
+    ink:     '#1b2430',
+    inkSoft: '#4a5568',
+    good:    '#5c7a5e',
+    watch:   '#c8862b',
+    danger:  '#a8503e',
+  };
+
+  // ---- SVG helpers ----
+  function svg(w, h, content, extraStyle) {
+    return '<svg viewBox="0 0 ' + w + ' ' + h + '" xmlns="http://www.w3.org/2000/svg" style="width:100%;height:auto;' + (extraStyle||'') + '">' + content + '</svg>';
+  }
+
+  function fmt(n) {
+    var num = Math.abs(Number(n) || 0);
+    if (num >= 1000000) return '$' + (num/1000000).toFixed(1) + 'M';
+    if (num >= 1000) return '$' + (num/1000).toFixed(0) + 'K';
+    return '$' + num.toLocaleString(undefined, {maximumFractionDigits:0});
+  }
+
+  // ---- 1. PIE CHART — Money Tracker spending breakdown ----
+  function renderSpendingPie(data) {
+    var rows = (data && data.rows) || [];
+    var totals = {};
+    var grand = 0;
+    rows.forEach(function(r) {
+      var amt = Number(r.amt) || 0;
+      if (amt > 0 && r.name) { totals[r.cat || 'Other'] = (totals[r.cat || 'Other'] || 0) + amt; grand += amt; }
+    });
+    if (grand <= 0) return '';
+    var colors = [C.navy, C.amber, C.sage, C.rust, '#7c6d8a', '#4a7c8a', '#8a6d4a', '#6d8a4a'];
+    var entries = Object.entries(totals).sort(function(a,b){return b[1]-a[1];});
+    var cx = 100, cy = 100, r = 80;
+    var slices = '';
+    var legend = '';
+    var angle = -Math.PI/2;
+    entries.forEach(function(e, i) {
+      var pct = e[1]/grand;
+      var sweep = pct * 2 * Math.PI;
+      var x1 = cx + r*Math.cos(angle);
+      var y1 = cy + r*Math.sin(angle);
+      var x2 = cx + r*Math.cos(angle+sweep);
+      var y2 = cy + r*Math.sin(angle+sweep);
+      var large = sweep > Math.PI ? 1 : 0;
+      var color = colors[i % colors.length];
+      slices += '<path d="M'+cx+','+cy+' L'+x1+','+y1+' A'+r+','+r+' 0 '+large+',1 '+x2+','+y2+' Z" fill="'+color+'" stroke="white" stroke-width="2"/>';
+      // Label on slice if large enough
+      if (pct > 0.08) {
+        var midAngle = angle + sweep/2;
+        var lx = cx + (r*0.65)*Math.cos(midAngle);
+        var ly = cy + (r*0.65)*Math.sin(midAngle);
+        slices += '<text x="'+lx+'" y="'+ly+'" text-anchor="middle" dominant-baseline="middle" fill="white" font-size="9" font-weight="700">'+Math.round(pct*100)+'%</text>';
+      }
+      legend += '<rect x="220" y="'+(20+i*22)+'" width="12" height="12" rx="2" fill="'+color+'"/>'
+        + '<text x="238" y="'+(31+i*22)+'" font-size="11" fill="'+C.inkSoft+'">'+e[0]+'</text>'
+        + '<text x="360" y="'+(31+i*22)+'" text-anchor="end" font-size="11" font-weight="700" fill="'+C.ink+'">'+fmt(e[1])+'</text>';
+      angle += sweep;
+    });
+    // Center total
+    slices += '<circle cx="'+cx+'" cy="'+cy+'" r="36" fill="white"/>';
+    slices += '<text x="'+cx+'" y="'+(cy-8)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">Total</text>';
+    slices += '<text x="'+cx+'" y="'+(cy+8)+'" text-anchor="middle" font-size="13" font-weight="700" fill="'+C.ink+'">'+fmt(grand)+'</text>';
+    return svg(380, 200+Math.max(0,(entries.length-6)*22), slices+legend);
+  }
+
+  // ---- 2. GAUGE — Profit Margin ----
+  function renderProfitGauge(revenue, netIncome) {
+    if (!revenue || revenue <= 0) return '';
+    var margin = (netIncome / revenue) * 100;
+    var clamped = Math.max(-30, Math.min(40, margin));
+    // Map -30..40 to 0..180 degrees
+    var angleDeg = ((clamped + 30) / 70) * 180;
+    var angleRad = (angleDeg - 180) * Math.PI / 180;
+    var cx = 130, cy = 110, r = 90;
+    var nx = cx + r * Math.cos(angleRad);
+    var ny = cy + r * Math.sin(angleRad);
+    var status = margin >= 15 ? 'Healthy' : margin >= 5 ? 'Watch' : 'Danger';
+    var statusColor = margin >= 15 ? C.good : margin >= 5 ? C.watch : C.danger;
+    var content = ''
+      // Background arc segments
+      + '<path d="M '+(cx-r)+','+cy+' A '+r+','+r+' 0 0,1 '+(cx+r)+','+cy+'" fill="none" stroke="'+C.line+'" stroke-width="20"/>'
+      // Danger zone (0-20%)
+      + '<path d="M '+(cx-r)+','+cy+' A '+r+','+r+' 0 0,1 '+(cx + r*Math.cos(-Math.PI + 0.571))+','+(cy + r*Math.sin(-Math.PI + 0.571))+'" fill="none" stroke="'+C.rust+'" stroke-width="20" opacity="0.3"/>'
+      // Watch zone (20-50%)
+      + '<path d="M '+(cx + r*Math.cos(-Math.PI + 0.571))+','+(cy + r*Math.sin(-Math.PI + 0.571))+' A '+r+','+r+' 0 0,1 '+(cx + r*Math.cos(-Math.PI + 1.571))+','+(cy + r*Math.sin(-Math.PI + 1.571))+'" fill="none" stroke="'+C.amber+'" stroke-width="20" opacity="0.3"/>'
+      // Good zone (50-100%)
+      + '<path d="M '+(cx + r*Math.cos(-Math.PI + 1.571))+','+(cy + r*Math.sin(-Math.PI + 1.571))+' A '+r+','+r+' 0 0,1 '+(cx+r)+','+cy+'" fill="none" stroke="'+C.sage+'" stroke-width="20" opacity="0.3"/>'
+      // Needle
+      + '<line x1="'+cx+'" y1="'+cy+'" x2="'+nx+'" y2="'+ny+'" stroke="'+C.navy+'" stroke-width="3" stroke-linecap="round"/>'
+      + '<circle cx="'+cx+'" cy="'+cy+'" r="6" fill="'+C.navy+'"/>'
+      // Labels
+      + '<text x="'+(cx-r-8)+'" y="'+(cy+20)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">Loss</text>'
+      + '<text x="'+cx+'" y="'+(cy-r-12)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">15%</text>'
+      + '<text x="'+(cx+r+8)+'" y="'+(cy+20)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">40%</text>'
+      // Value
+      + '<text x="'+cx+'" y="'+(cy+28)+'" text-anchor="middle" font-size="22" font-weight="700" fill="'+statusColor+'">'+margin.toFixed(1)+'%</text>'
+      + '<text x="'+cx+'" y="'+(cy+44)+'" text-anchor="middle" font-size="11" fill="'+statusColor+'" font-weight="700">'+status+'</text>'
+      + '<text x="'+cx+'" y="'+(cy+60)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">Profit Margin</text>';
+    return svg(260, 160, content);
+  }
+
+  // ---- 3. BAR CHART — Revenue vs Expenses ----
+  function renderRevenueExpensesBar(revenue, expenses, netIncome) {
+    if (!revenue && !expenses) return '';
+    var max = Math.max(revenue, expenses, 1);
+    var barW = 60, gap = 30, h = 160, padL = 50, padB = 30, padT = 20;
+    var scaleH = h - padB - padT;
+    var rH = Math.round((revenue/max) * scaleH);
+    var eH = Math.round((expenses/max) * scaleH);
+    var nColor = netIncome >= 0 ? C.good : C.danger;
+    var content = ''
+      // Y axis
+      + '<line x1="'+padL+'" y1="'+padT+'" x2="'+padL+'" y2="'+(h-padB)+'" stroke="'+C.line+'" stroke-width="1"/>'
+      // Revenue bar
+      + '<rect x="'+(padL+gap)+'" y="'+(h-padB-rH)+'" width="'+barW+'" height="'+rH+'" fill="'+C.navy+'" rx="4"/>'
+      + '<text x="'+(padL+gap+barW/2)+'" y="'+(h-padB-rH-6)+'" text-anchor="middle" font-size="10" font-weight="700" fill="'+C.navy+'">'+fmt(revenue)+'</text>'
+      + '<text x="'+(padL+gap+barW/2)+'" y="'+(h-padB+14)+'" text-anchor="middle" font-size="10" fill="'+C.inkSoft+'">Revenue</text>'
+      // Expenses bar
+      + '<rect x="'+(padL+gap*2+barW)+'" y="'+(h-padB-eH)+'" width="'+barW+'" height="'+eH+'" fill="'+C.rust+'" rx="4" opacity="0.8"/>'
+      + '<text x="'+(padL+gap*2+barW+barW/2)+'" y="'+(h-padB-eH-6)+'" text-anchor="middle" font-size="10" font-weight="700" fill="'+C.rust+'">'+fmt(expenses)+'</text>'
+      + '<text x="'+(padL+gap*2+barW+barW/2)+'" y="'+(h-padB+14)+'" text-anchor="middle" font-size="10" fill="'+C.inkSoft+'">Expenses</text>'
+      // Net income label
+      + '<text x="'+(padL+gap*3+barW*2+20)+'" y="'+(h/2)+'" text-anchor="middle" font-size="10" fill="'+C.inkSoft+'">Net</text>'
+      + '<text x="'+(padL+gap*3+barW*2+20)+'" y="'+(h/2+16)+'" text-anchor="middle" font-size="14" font-weight="700" fill="'+nColor+'">'+fmt(netIncome)+'</text>'
+      // Baseline
+      + '<line x1="'+padL+'" y1="'+(h-padB)+'" x2="260" y2="'+(h-padB)+'" stroke="'+C.line+'" stroke-width="1"/>';
+    return svg(260, h, content);
+  }
+
+  // ---- 4. LINE CHART — 90-day cash forecast ----
+  function renderForecastLine(cash, monthlyIncome, monthlyExpenses) {
+    if (!cash && !monthlyIncome) return '';
+    var months = 4;
+    var points = [];
+    var current = Number(cash) || 0;
+    var income = Number(monthlyIncome) || 0;
+    var expenses = Number(monthlyExpenses) || 0;
+    for (var i = 0; i <= months; i++) {
+      points.push(current + (income - expenses) * i);
+    }
+    var minV = Math.min.apply(null, points);
+    var maxV = Math.max.apply(null, points);
+    var range = Math.max(maxV - minV, 1);
+    var w = 280, h = 140, padL = 55, padR = 15, padT = 15, padB = 30;
+    var chartW = w - padL - padR;
+    var chartH = h - padT - padB;
+    var coords = points.map(function(v, i) {
+      var x = padL + (i/months)*chartW;
+      var y = padT + chartH - ((v-minV)/range)*chartH;
+      return x+','+y;
+    });
+    var color = points[months] >= points[0] ? C.sage : C.rust;
+    var content = ''
+      // Zero line if applicable
+      + (minV < 0 ? '<line x1="'+padL+'" y1="'+(padT+chartH-((0-minV)/range)*chartH)+'" x2="'+(w-padR)+'" y2="'+(padT+chartH-((0-minV)/range)*chartH)+'" stroke="'+C.rust+'" stroke-width="1" stroke-dasharray="4,2" opacity="0.5"/>' : '')
+      // Area fill
+      + '<polyline points="'+coords.join(' ')+'" fill="none" stroke="'+color+'" stroke-width="2.5" stroke-linejoin="round"/>'
+      // Points
+      + points.map(function(v,i){
+          var x = padL + (i/months)*chartW;
+          var y = padT + chartH - ((v-minV)/range)*chartH;
+          return '<circle cx="'+x+'" cy="'+y+'" r="4" fill="'+color+'" stroke="white" stroke-width="1.5"/>'
+            + '<text x="'+x+'" y="'+(y-10)+'" text-anchor="middle" font-size="9" fill="'+color+'" font-weight="700">'+fmt(v)+'</text>';
+        }).join('')
+      // X axis labels
+      + ['Now','30d','60d','90d','4mo'].map(function(l,i){
+          var x = padL + (i/months)*chartW;
+          return '<text x="'+x+'" y="'+(h-padB+14)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">'+l+'</text>';
+        }).join('')
+      // Y axis
+      + '<line x1="'+padL+'" y1="'+padT+'" x2="'+padL+'" y2="'+(h-padB)+'" stroke="'+C.line+'" stroke-width="1"/>'
+      + '<line x1="'+padL+'" y1="'+(h-padB)+'" x2="'+(w-padR)+'" y2="'+(h-padB)+'" stroke="'+C.line+'" stroke-width="1"/>'
+      + '<text x="10" y="'+(padT+chartH/2)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'" transform="rotate(-90,10,'+(padT+chartH/2)+')">Cash</text>';
+    return svg(w, h, content);
+  }
+
+  // ---- 5. BREAK-EVEN PROGRESS BAR ----
+  function renderBreakevenBar(revenue, fixedCosts, grossMarginPct) {
+    if (!fixedCosts || !grossMarginPct) return '';
+    var breakeven = fixedCosts / (grossMarginPct/100);
+    var pct = Math.min(1, revenue/breakeven);
+    var color = pct >= 1 ? C.good : pct >= 0.7 ? C.watch : C.danger;
+    var w = 280, bH = 20;
+    var content = ''
+      + '<text x="0" y="14" font-size="11" fill="'+C.inkSoft+'">Break-even Progress</text>'
+      + '<rect x="0" y="22" width="'+w+'" height="'+bH+'" rx="10" fill="'+C.line+'"/>'
+      + '<rect x="0" y="22" width="'+(pct*w)+'" height="'+bH+'" rx="10" fill="'+color+'"/>'
+      + '<text x="'+(pct*w+6)+'" y="37" font-size="10" fill="'+color+'" font-weight="700">'+Math.round(pct*100)+'%</text>'
+      + '<text x="0" y="58" font-size="10" fill="'+C.inkSoft+'">Target: '+fmt(breakeven)+'</text>'
+      + '<text x="'+w+'" y="58" text-anchor="end" font-size="10" fill="'+C.ink+'" font-weight="700">Current: '+fmt(revenue)+'</text>'
+      + (pct >= 1
+        ? '<text x="'+(w/2)+'" y="80" text-anchor="middle" font-size="11" fill="'+C.good+'" font-weight="700">✓ Above break-even — you\'re profitable</text>'
+        : '<text x="'+(w/2)+'" y="80" text-anchor="middle" font-size="11" fill="'+C.rust+'">Need '+fmt(breakeven-revenue)+' more to break even</text>');
+    return svg(w, 88, content);
+  }
+
+  // ---- 6. FINANCIAL HEALTH SCORE ----
+  function calcHealthScore(data) {
+    var score = 50; // baseline
+    var factors = [];
+    var truth = data.truth || {};
+    var pnl = data.pnl || {};
+    var breakeven = data.breakeven || {};
+    var rev = Number(truth.revenue || pnl.revenue) || 0;
+    var exp = Number(truth.expenses || pnl.opex) || 0;
+    var bank = Number(truth.bank) || 0;
+    var ar = Number(truth.ar) || 0;
+    var ap = Number(truth.ap) || 0;
+    var cogs = Number(pnl.cogs) || 0;
+    // Profit margin
+    if (rev > 0) {
+      var margin = ((rev - exp - cogs) / rev) * 100;
+      if (margin >= 20) { score += 15; factors.push({text: 'Strong profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 10) { score += 8; factors.push({text: 'Healthy profit margin ('+margin.toFixed(0)+'%)', positive: true}); }
+      else if (margin >= 0) { score += 0; factors.push({text: 'Thin profit margin ('+margin.toFixed(0)+'%) — room to improve', positive: false}); }
+      else { score -= 15; factors.push({text: 'Negative profit margin — expenses exceed revenue', positive: false}); }
+    }
+    // Cash vs expenses
+    if (bank > 0 && exp > 0) {
+      var runway = bank / (exp/30);
+      if (runway >= 90) { score += 15; factors.push({text: 'Strong cash runway ('+Math.round(runway)+' days)', positive: true}); }
+      else if (runway >= 30) { score += 8; factors.push({text: 'Adequate cash runway ('+Math.round(runway)+' days)', positive: true}); }
+      else { score -= 10; factors.push({text: 'Low cash runway ('+Math.round(runway)+' days) — watch closely', positive: false}); }
+    }
+    // AR vs AP ratio
+    if (ar > 0 || ap > 0) {
+      if (ar > ap) { score += 5; factors.push({text: 'More owed to you than you owe', positive: true}); }
+      else if (ap > ar * 1.5) { score -= 8; factors.push({text: 'High payables vs receivables — cash pressure ahead', positive: false}); }
+    }
+    // Revenue vs expenses
+    if (rev > 0 && exp > 0) {
+      if (rev > exp + cogs) { score += 10; factors.push({text: 'Revenue covers all costs', positive: true}); }
+      else { score -= 5; factors.push({text: 'Revenue not yet covering all costs', positive: false}); }
+    }
+    score = Math.max(0, Math.min(100, score));
+    var grade = score >= 80 ? 'Excellent' : score >= 65 ? 'Good' : score >= 50 ? 'Fair' : score >= 35 ? 'Needs Attention' : 'Critical';
+    var color = score >= 80 ? C.good : score >= 65 ? C.sage : score >= 50 ? C.watch : score >= 35 ? C.amber : C.danger;
+    return { score: score, grade: grade, color: color, factors: factors.slice(0,4) };
+  }
+
+  function renderHealthScore(health) {
+    var s = health.score;
+    var circumference = 2 * Math.PI * 45;
+    var dashOffset = circumference * (1 - s/100);
+    var content = ''
+      + '<circle cx="60" cy="60" r="45" fill="none" stroke="'+C.line+'" stroke-width="10"/>'
+      + '<circle cx="60" cy="60" r="45" fill="none" stroke="'+health.color+'" stroke-width="10" stroke-linecap="round"'
+      + ' stroke-dasharray="'+circumference+'" stroke-dashoffset="'+dashOffset+'"'
+      + ' transform="rotate(-90 60 60)"/>'
+      + '<text x="60" y="55" text-anchor="middle" font-size="22" font-weight="700" fill="'+health.color+'">'+s+'</text>'
+      + '<text x="60" y="72" text-anchor="middle" font-size="10" fill="'+C.inkSoft+'">/100</text>'
+      + '<text x="140" y="20" font-size="16" font-weight="700" fill="'+health.color+'">'+health.grade+'</text>'
+      + health.factors.map(function(f, i) {
+          return '<text x="140" y="'+(38+i*18)+'" font-size="10" fill="'+(f.positive ? C.good : C.rust)+'">'
+            + (f.positive ? '✓ ' : '⚠ ') + f.text + '</text>';
+        }).join('');
+    return svg(320, 120, content);
+  }
+
+  // ---- 7. RUNWAY CALCULATOR ----
+  function renderRunway(bank, monthlyExpenses) {
+    if (!bank || !monthlyExpenses) return '';
+    var months = bank / monthlyExpenses;
+    var color = months >= 6 ? C.good : months >= 3 ? C.watch : C.danger;
+    var label = months >= 6 ? 'Strong runway' : months >= 3 ? 'Monitor closely' : 'Low runway — act now';
+    var bars = Math.min(12, Math.round(months));
+    var content = '<text x="0" y="14" font-size="11" fill="'+C.inkSoft+'">Cash Runway</text>';
+    for (var i = 0; i < 12; i++) {
+      var filled = i < bars;
+      content += '<rect x="'+(i*22)+'" y="22" width="18" height="28" rx="3" fill="'+(filled ? color : C.line)+'"/>';
+    }
+    content += '<text x="0" y="68" font-size="18" font-weight="700" fill="'+color+'">'+months.toFixed(1)+' months</text>'
+      + '<text x="0" y="84" font-size="11" fill="'+color+'" font-weight="600">'+label+'</text>'
+      + '<text x="264" y="84" text-anchor="end" font-size="10" fill="'+C.inkSoft+'">at '+fmt(monthlyExpenses)+'/mo</text>';
+    return svg(264, 92, content);
+  }
+
+  // ---- 8. MONTH-OVER-MONTH COMPARISON ----
+  function renderMoMComparison(current, previous, label) {
+    if (!current && !previous) return '';
+    var change = previous > 0 ? ((current-previous)/previous)*100 : 0;
+    var positive = current >= previous;
+    var arrow = positive ? '▲' : '▼';
+    var color = positive ? C.good : C.danger;
+    var content = ''
+      + '<text x="140" y="16" text-anchor="middle" font-size="11" fill="'+C.inkSoft+'">'+label+'</text>'
+      + '<text x="70" y="50" text-anchor="middle" font-size="22" font-weight="700" fill="'+C.ink+'">'+fmt(current)+'</text>'
+      + '<text x="70" y="65" text-anchor="middle" font-size="10" fill="'+C.inkSoft+'">This month</text>'
+      + '<text x="140" y="46" text-anchor="middle" font-size="16" fill="'+color+'">'+arrow+'</text>'
+      + '<text x="140" y="62" text-anchor="middle" font-size="11" font-weight="700" fill="'+color+'">'+Math.abs(change).toFixed(1)+'%</text>'
+      + '<text x="210" y="50" text-anchor="middle" font-size="22" font-weight="700" fill="'+C.inkSoft+'">'+fmt(previous)+'</text>'
+      + '<text x="210" y="65" text-anchor="middle" font-size="10" fill="'+C.inkSoft+'">Last month</text>'
+      + '<line x1="0" y1="75" x2="280" y2="75" stroke="'+C.line+'" stroke-width="1"/>';
+    return svg(280, 82, content);
+  }
+
+  // ---- 9. WHAT-IF SCENARIOS ----
+  function renderWhatIf(revenue, expenses, cogs) {
+    if (!revenue) return '';
+    var currentProfit = revenue - expenses - cogs;
+    var scenarios = [
+      { label: 'Price +10%', rev: revenue*1.1, exp: expenses, cogs: cogs },
+      { label: 'Price +20%', rev: revenue*1.2, exp: expenses, cogs: cogs },
+      { label: 'Costs -10%', rev: revenue, exp: expenses*0.9, cogs: cogs },
+      { label: 'Both +10%', rev: revenue*1.1, exp: expenses*0.9, cogs: cogs },
+    ];
+    var maxP = Math.max.apply(null, scenarios.map(function(s){return s.rev-s.exp-s.cogs;}));
+    var minP = Math.min(currentProfit, 0);
+    var range = Math.max(maxP - minP, 1);
+    var barW = 44, gap = 12, padL = 50, padT = 15, padB = 30, h = 140;
+    var chartH = h - padT - padB;
+    var zeroY = padT + chartH - ((0-minP)/range)*chartH;
+    var content = ''
+      + '<line x1="'+padL+'" y1="'+zeroY+'" x2="'+(padL+scenarios.length*(barW+gap))+'" y2="'+zeroY+'" stroke="'+C.line+'" stroke-width="1" stroke-dasharray="4,2"/>'
+      + '<text x="'+padL+'" y="'+(zeroY-4)+'" font-size="8" fill="'+C.inkSoft+'">$0</text>'
+      // Current bar
+      + '<rect x="0" y="'+(padT + chartH - ((currentProfit-minP)/range)*chartH)+'" width="'+(padL-4)+'" height="'+((currentProfit-minP)/range*chartH)+'" fill="'+C.navy+'" rx="2" opacity="0.5"/>'
+      + '<text x="'+(padL/2)+'" y="'+(h-padB+14)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">Now</text>'
+      + '<text x="'+(padL/2)+'" y="'+(padT+chartH-((currentProfit-minP)/range)*chartH-4)+'" text-anchor="middle" font-size="8" fill="'+C.navy+'">'+fmt(currentProfit)+'</text>';
+    scenarios.forEach(function(s, i) {
+      var profit = s.rev - s.exp - s.cogs;
+      var bH = Math.abs((profit-minP)/range*chartH);
+      var by = padT + chartH - ((profit-minP)/range*chartH);
+      var color = profit >= currentProfit ? C.sage : C.rust;
+      var x = padL + i*(barW+gap);
+      content += '<rect x="'+x+'" y="'+by+'" width="'+barW+'" height="'+bH+'" fill="'+color+'" rx="2" opacity="0.7"/>'
+        + '<text x="'+(x+barW/2)+'" y="'+(by-4)+'" text-anchor="middle" font-size="8" fill="'+color+'" font-weight="700">'+fmt(profit)+'</text>'
+        + '<text x="'+(x+barW/2)+'" y="'+(h-padB+14)+'" text-anchor="middle" font-size="9" fill="'+C.inkSoft+'">'+s.label+'</text>';
+    });
+    return svg(padL + scenarios.length*(barW+gap) + 10, h, content);
+  }
+
+  // ---- Inject charts into tool result panels ----
+  function injectCharts() {
+    var tab = getActiveTab();
+    var cData = window.currentData || {};
+
+    if (tab === 'tracker') {
+      var resultEl = document.querySelector('#tool-container .result');
+      if (resultEl && !resultEl.querySelector('.chart-injected')) {
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-injected';
+        chartDiv.style.cssText = 'margin-top:20px;padding-top:16px;border-top:1px solid #e3ddd0;';
+        chartDiv.innerHTML = '<div style="font-size:12px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:12px;">Spending Breakdown</div>'
+          + renderSpendingPie(cData.tracker);
+        resultEl.appendChild(chartDiv);
+      }
+    }
+
+    if (tab === 'pnl') {
+      var resultEl = document.getElementById('tool-result');
+      if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
+        var d = cData.pnl || {};
+        var rev = Number(d.revenue)||0, cogs = Number(d.cogs)||0, opex = Number(d.opex)||0;
+        var net = rev - cogs - opex;
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-injected';
+        chartDiv.style.cssText = 'margin-top:20px;display:grid;grid-template-columns:1fr 1fr;gap:16px;';
+        chartDiv.innerHTML = '<div><div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Revenue vs Expenses</div>'+renderRevenueExpensesBar(rev, opex+cogs, net)+'</div>'
+          + '<div><div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Profit Margin</div>'+renderProfitGauge(rev, net)+'</div>';
+        resultEl.appendChild(chartDiv);
+      }
+    }
+
+    if (tab === 'truth') {
+      var resultEl = document.getElementById('tool-result');
+      if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
+        var d = cData.truth || {};
+        var rev = Number(d.revenue)||0, exp = Number(d.expenses)||0, bank = Number(d.bank)||0;
+        var health = calcHealthScore(cData);
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-injected';
+        chartDiv.style.cssText = 'margin-top:20px;';
+        chartDiv.innerHTML = '<div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Financial Health Score</div>'
+          + renderHealthScore(health)
+          + '<div style="margin-top:16px;"><div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Cash Runway</div>'
+          + renderRunway(bank, exp) + '</div>';
+        resultEl.appendChild(chartDiv);
+      }
+    }
+
+    if (tab === 'breakeven') {
+      var resultEl = document.getElementById('tool-result');
+      if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
+        var d = cData.breakeven || {};
+        var pnlD = cData.pnl || {};
+        var fixed = Number(d.fixed)||0, price = Number(d.price)||0, cost = Number(d.cost)||0;
+        var rev = Number(pnlD.revenue || (cData.truth||{}).revenue)||0;
+        var gm = price > 0 ? ((price-cost)/price)*100 : 60;
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-injected';
+        chartDiv.style.cssText = 'margin-top:20px;';
+        var beContent = renderBreakevenBar(rev, fixed, gm);
+        if (beContent) {
+          chartDiv.innerHTML = '<div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Break-Even Progress</div>' + beContent;
+          resultEl.appendChild(chartDiv);
+        }
+      }
+    }
+
+    if (tab === 'forecast') {
+      var resultEl = document.getElementById('tool-result');
+      if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
+        var d = cData.forecast || {};
+        var tD = cData.truth || {};
+        var bank = Number(tD.bank)||0;
+        var income = Number(d.income)||0, expF = Number(d.expenses)||0;
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-injected';
+        chartDiv.style.cssText = 'margin-top:20px;';
+        var fcContent = renderForecastLine(bank, income, expF);
+        if (fcContent) {
+          chartDiv.innerHTML = '<div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">90-Day Cash Forecast</div>' + fcContent;
+          // What-if scenarios
+          var rev = Number((cData.pnl||{}).revenue || tD.revenue)||0;
+          var exp = Number((cData.pnl||{}).opex || tD.expenses)||0;
+          var cogs = Number((cData.pnl||{}).cogs)||0;
+          if (rev > 0) {
+            chartDiv.innerHTML += '<div style="margin-top:16px;"><div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">What-If Scenarios</div>'
+              + renderWhatIf(rev, exp, cogs) + '</div>';
+          }
+          resultEl.appendChild(chartDiv);
+        }
+      }
+    }
+
+    if (tab === 'snapshot') {
+      var resultEl = document.getElementById('tool-result');
+      if (resultEl && resultEl.innerHTML && !resultEl.querySelector('.chart-injected')) {
+        var d = cData.snapshot || {};
+        var rev = Number(d.revenue)||0, exp = Number(d.expenses)||0;
+        var chartDiv = document.createElement('div');
+        chartDiv.className = 'chart-injected';
+        chartDiv.style.cssText = 'margin-top:20px;';
+        if (rev > 0) {
+          chartDiv.innerHTML = '<div style="font-size:11px;color:#9a9080;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin-bottom:8px;">Revenue vs Expenses</div>'
+            + renderRevenueExpensesBar(rev, exp, rev-exp);
+          resultEl.appendChild(chartDiv);
+        }
+      }
+    }
+  }
+
+  // Watch for result panel updates and inject charts
+  function watchForResults() {
+    if (!window._patchApplied) { setTimeout(watchForResults, 200); return; }
+    var toolContainer = document.getElementById('tool-container');
+    if (!toolContainer) { setTimeout(watchForResults, 200); return; }
+    var chartObserver = new MutationObserver(function(mutations) {
+      var hasNew = mutations.some(function(m) { return m.addedNodes.length > 0 || m.type === 'characterData'; });
+      if (hasNew) setTimeout(injectCharts, 100);
+    });
+    chartObserver.observe(toolContainer, { childList: true, subtree: true, characterData: true });
+    console.log('[charts] Chart system initialized');
+  }
+  watchForResults();
+
+})();
