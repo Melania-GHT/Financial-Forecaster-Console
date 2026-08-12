@@ -12,10 +12,11 @@ const { Resend } = require('resend');
 const resend = new Resend(process.env.RESEND_API_KEY);
 const FROM_EMAIL = 'info@e-servicesbymel.com';
 const APP_URL = process.env.APP_URL || 'https://financial-forecaster-console-3.onrender.com';
+const TRIAL_DAYS = 4;
+const FOUNDING_MEMBER_LIMIT = 50;
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
 app.set('trust proxy', 1);
 
 if (!process.env.DATABASE_URL) { console.error('Missing DATABASE_URL'); process.exit(1); }
@@ -31,223 +32,22 @@ const PRICES = {
   founding: process.env.STRIPE_PRICE_FOUNDING,
 };
 
-const TRIAL_DAYS = 4;
-const FOUNDING_MEMBER_LIMIT = 50;
-
-// ---------- EMAIL FUNCTIONS ----------
-
-async function sendEmail(to, subject, html) {
-  if (!process.env.RESEND_API_KEY) {
-    console.log('Email skipped — no RESEND_API_KEY:', subject, 'to', to);
-    return;
-  }
-  try {
-    await resend.emails.send({
-      from: `E-SERVICES BY MEL <${FROM_EMAIL}>`,
-      to,
-      subject,
-      html,
-    });
-    console.log(`Email sent: "${subject}" to ${to}`);
-  } catch (err) {
-    console.error('Email send error:', err.message);
-  }
-}
-
-function trialExpiryReminderHTML(email, daysLeft) {
-  const urgencyColor = daysLeft <= 1 ? '#a8503e' : '#c8862b';
-  const urgencyText = daysLeft <= 1 ? 'expires TODAY' : 'expires TOMORROW';
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-    <div style="background:#1f3148;padding:28px 32px;">
-      <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:1px;">E-SERVICES BY MEL™</div>
-    </div>
-    <div style="padding:32px;">
-      <div style="background:${urgencyColor};color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">
-        ⏰ Your free trial ${urgencyText}
-      </div>
-      <h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Don't lose your financial clarity.</h2>
-      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">
-        Your 4-day free trial of The Clarity Console™ ${urgencyText}. 
-        After your trial ends, you'll lose access to all 8 tools, your saved data, and the QuickBooks import feature.
-      </p>
-      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">
-        The good news — upgrading takes less than 2 minutes and your data stays saved.
-      </p>
-      <div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">
-        <div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Choose your plan:</div>
-        <table style="width:100%;border-collapse:collapse;">
-          <tr>
-            <td style="padding:8px 0;border-bottom:1px solid #e3ddd0;">
-              <span style="font-weight:600;color:#1f3148;">⭐ Founding Member</span>
-              <span style="font-size:12px;color:#c8862b;margin-left:8px;">First 50 only</span>
-            </td>
-            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;border-bottom:1px solid #e3ddd0;">$297 lifetime</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0;border-bottom:1px solid #e3ddd0;"><span style="font-weight:600;color:#1f3148;">Annual</span></td>
-            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;border-bottom:1px solid #e3ddd0;">$249/year</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0;border-bottom:1px solid #e3ddd0;"><span style="font-weight:600;color:#1f3148;">Lifetime</span></td>
-            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;border-bottom:1px solid #e3ddd0;">$497 once</td>
-          </tr>
-          <tr>
-            <td style="padding:8px 0;"><span style="font-weight:600;color:#1f3148;">Monthly</span></td>
-            <td style="text-align:right;font-weight:700;color:#1f3148;padding:8px 0;">$47/month</td>
-          </tr>
-        </table>
-      </div>
-      <a href="${APP_URL}/paywall.html" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">
-        Choose My Plan →
-      </a>
-      <p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">
-        Questions? Reply to this email — we're here to help.<br>
-        <a href="${APP_URL}" style="color:#c8862b;">Go to my dashboard</a>
-      </p>
-    </div>
-    <div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;border-top:1px solid #e3ddd0;">
-      © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.<br>
-      You're receiving this because you signed up for a free trial at The Clarity Console™.
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-function subscriptionExpiryReminderHTML(email, daysLeft, plan) {
-  const planLabel = plan === 'monthly' ? 'Monthly' : plan === 'annual' ? 'Annual' : plan;
-  return `
-<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
-  <div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-    <div style="background:#1f3148;padding:28px 32px;">
-      <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
-      <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:1px;">E-SERVICES BY MEL™</div>
-    </div>
-    <div style="padding:32px;">
-      <div style="background:#c8862b;color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">
-        ⏰ Your ${planLabel} subscription expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}
-      </div>
-      <h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Time to renew your access.</h2>
-      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">
-        Your ${planLabel} subscription to The Clarity Console™ expires in ${daysLeft} day${daysLeft !== 1 ? 's' : ''}. 
-        Renew now to keep uninterrupted access to all your tools and saved data.
-      </p>
-      <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">
-        Want to save money? Consider upgrading to an Annual or Lifetime plan.
-      </p>
-      <a href="${APP_URL}/paywall.html" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">
-        Renew My Access →
-      </a>
-      <p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">
-        Questions? Reply to this email — we're here to help.<br>
-        <a href="${APP_URL}" style="color:#c8862b;">Go to my dashboard</a>
-      </p>
-    </div>
-    <div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;border-top:1px solid #e3ddd0;">
-      © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.
-    </div>
-  </div>
-</body>
-</html>`;
-}
-
-// Daily job — check for expiring accounts and send reminders
-async function sendExpiryReminders() {
-  console.log('Running daily expiry reminder check...');
-  try {
-    // Trial users expiring in 1 day
-    const trialExpiring1Day = await pool.query(`
-      SELECT id, email, trial_ends_at FROM users
-      WHERE subscription_status = 'trial'
-      AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '25 hours'
-      AND trial_ends_at > NOW()
-    `);
-    for (const user of trialExpiring1Day.rows) {
-      await sendEmail(
-        user.email,
-        '⏰ Your Clarity Console trial expires today',
-        trialExpiryReminderHTML(user.email, 1)
-      );
-    }
-
-    // Trial users expiring in 2 days
-    const trialExpiring2Days = await pool.query(`
-      SELECT id, email, trial_ends_at FROM users
-      WHERE subscription_status = 'trial'
-      AND trial_ends_at BETWEEN NOW() + INTERVAL '25 hours' AND NOW() + INTERVAL '49 hours'
-    `);
-    for (const user of trialExpiring2Days.rows) {
-      await sendEmail(
-        user.email,
-        '⏰ Your Clarity Console trial expires tomorrow',
-        trialExpiryReminderHTML(user.email, 2)
-      );
-    }
-
-    // Paid subscribers expiring in 3 days
-    const paidExpiring3Days = await pool.query(`
-      SELECT id, email, subscription_plan, access_expires_at FROM users
-      WHERE subscription_status = 'active'
-      AND access_expires_at BETWEEN NOW() + INTERVAL '2 days' AND NOW() + INTERVAL '4 days'
-    `);
-    for (const user of paidExpiring3Days.rows) {
-      await sendEmail(
-        user.email,
-        `Your Clarity Console ${user.subscription_plan} subscription expires in 3 days`,
-        subscriptionExpiryReminderHTML(user.email, 3, user.subscription_plan)
-      );
-    }
-
-    console.log(`Reminders sent: ${trialExpiring1Day.rows.length + trialExpiring2Days.rows.length + paidExpiring3Days.rows.length} emails`);
-  } catch (err) {
-    console.error('Expiry reminder error:', err);
-  }
-}
-
-// Run reminder check every 24 hours
-setInterval(sendExpiryReminders, 24 * 60 * 60 * 1000);
-// Also run once on startup after 5 minutes
-setTimeout(sendExpiryReminders, 5 * 60 * 1000);
-
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
 async function ensureTablesExist() {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      email TEXT UNIQUE NOT NULL,
-      password_hash TEXT NOT NULL,
-      created_at TIMESTAMP DEFAULT NOW(),
-      last_login TIMESTAMP,
-      tools_used TEXT[] DEFAULT '{}',
-      trial_ends_at TIMESTAMP,
-      subscription_status TEXT DEFAULT 'trial',
-      subscription_plan TEXT,
-      stripe_customer_id TEXT,
-      stripe_subscription_id TEXT,
-      access_expires_at TIMESTAMP
-    );
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_data (
-      user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
-      data JSONB NOT NULL DEFAULT '{}',
-      updated_at TIMESTAMP DEFAULT NOW()
-    );
-  `);
-  // Add columns for existing installs
+  await pool.query(`CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY, email TEXT UNIQUE NOT NULL, password_hash TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(), last_login TIMESTAMP, tools_used TEXT[] DEFAULT '{}',
+    trial_ends_at TIMESTAMP, subscription_status TEXT DEFAULT 'trial', subscription_plan TEXT,
+    stripe_customer_id TEXT, stripe_subscription_id TEXT, access_expires_at TIMESTAMP
+  );`);
+  await pool.query(`CREATE TABLE IF NOT EXISTS user_data (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    data JSONB NOT NULL DEFAULT '{}', updated_at TIMESTAMP DEFAULT NOW()
+  );`);
   const cols = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS tools_used TEXT[] DEFAULT '{}'`,
@@ -264,23 +64,98 @@ async function ensureTablesExist() {
 
 function hasAccess(user) {
   if (!user) return false;
-  const status = user.subscription_status;
-  if (status === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
-  if (status === 'active') {
-    if (!user.access_expires_at) return true;
-    return new Date(user.access_expires_at) > new Date();
-  }
-  if (status === 'lifetime') return true;
+  const s = user.subscription_status;
+  if (s === 'trial' && user.trial_ends_at && new Date(user.trial_ends_at) > new Date()) return true;
+  if (s === 'active') { if (!user.access_expires_at) return true; return new Date(user.access_expires_at) > new Date(); }
+  if (s === 'lifetime') return true;
   return false;
 }
 
 function daysLeftInTrial(user) {
   if (!user.trial_ends_at) return 0;
-  const diff = new Date(user.trial_ends_at) - new Date();
-  return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  return Math.max(0, Math.ceil((new Date(user.trial_ends_at) - new Date()) / (1000*60*60*24)));
 }
 
+// ---------- EMAIL ----------
+
+async function sendEmail(to, subject, html) {
+  if (!process.env.RESEND_API_KEY) { console.log('Email skipped — no RESEND_API_KEY'); return; }
+  try {
+    const result = await resend.emails.send({ from: `E-SERVICES BY MEL <${FROM_EMAIL}>`, to, subject, html });
+    console.log(`Email sent to ${to}:`, JSON.stringify(result));
+  } catch (err) { console.error(`Email error to ${to}:`, err.message); }
+}
+
+function welcomeEmailHtml() {
+  return '<html><body style="margin:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
+    + '<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;">'
+    + '<div style="background:#1f3148;padding:28px 32px;">'
+    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div>'
+    + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;">E-SERVICES BY MEL</div>'
+    + '</div><div style="padding:32px;">'
+    + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Welcome! Your 4-day free trial starts now.</h2>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">You now have full access to The Clarity Console — 8 financial clarity tools that translate your business numbers into plain English.</p>'
+    + '<div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">'
+    + '<div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Start here:</div>'
+    + '<p style="color:#4a5568;font-size:14px;margin:0 0 8px;"><strong>If you use QuickBooks</strong> - click Import from QuickBooks in the sidebar, export any report as CSV, and upload it.</p>'
+    + '<p style="color:#4a5568;font-size:14px;margin:0;"><strong>If you do not use QuickBooks</strong> - start with Tool 1: Cash Truth Check. Just 5 numbers and you will see where your cash is going.</p>'
+    + '</div>'
+    + '<a href="' + APP_URL + '" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Go to My Dashboard</a>'
+    + '<p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">Your trial ends in 4 days. Questions? Reply to this email.</p>'
+    + '</div><div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;">'
+    + '2026 E-SERVICES BY MEL | The Clarity Console | All rights reserved.'
+    + '</div></div></body></html>';
+}
+
+function trialReminderHtml(daysLeft) {
+  const urgent = daysLeft <= 1;
+  const color = urgent ? '#a8503e' : '#c8862b';
+  const when = urgent ? 'TODAY' : 'TOMORROW';
+  return '<html><body style="margin:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
+    + '<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;">'
+    + '<div style="background:#1f3148;padding:28px 32px;"><div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div></div>'
+    + '<div style="padding:32px;">'
+    + '<div style="background:' + color + ';color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">Your free trial expires ' + when + '</div>'
+    + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Do not lose your financial clarity.</h2>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">Your 4-day free trial expires ' + when + '. Upgrade now to keep full access.</p>'
+    + '<a href="' + APP_URL + '/paywall.html" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Choose My Plan</a>'
+    + '<p style="color:#9a9080;font-size:12px;text-align:center;">Plans from $47/month. Questions? Reply to this email.</p>'
+    + '</div></div></body></html>';
+}
+
+function subscriptionReminderHtml(plan, daysLeft) {
+  return '<html><body style="margin:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
+    + '<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;">'
+    + '<div style="background:#1f3148;padding:28px 32px;"><div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div></div>'
+    + '<div style="padding:32px;">'
+    + '<div style="background:#c8862b;color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">Your ' + plan + ' subscription expires in ' + daysLeft + ' days</div>'
+    + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Time to renew your access.</h2>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">Renew now to keep uninterrupted access to all your tools and saved data.</p>'
+    + '<a href="' + APP_URL + '/paywall.html" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;">Renew My Access</a>'
+    + '</div></div></body></html>';
+}
+
+async function sendExpiryReminders() {
+  console.log('Running daily expiry reminder check...');
+  try {
+    const t1 = await pool.query(`SELECT id,email FROM users WHERE subscription_status='trial' AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '25 hours' AND trial_ends_at > NOW()`);
+    for (const u of t1.rows) await sendEmail(u.email, 'Your Clarity Console trial expires today', trialReminderHtml(1));
+
+    const t2 = await pool.query(`SELECT id,email FROM users WHERE subscription_status='trial' AND trial_ends_at BETWEEN NOW() + INTERVAL '25 hours' AND NOW() + INTERVAL '49 hours'`);
+    for (const u of t2.rows) await sendEmail(u.email, 'Your Clarity Console trial expires tomorrow', trialReminderHtml(2));
+
+    const p3 = await pool.query(`SELECT id,email,subscription_plan FROM users WHERE subscription_status='active' AND access_expires_at BETWEEN NOW() + INTERVAL '2 days' AND NOW() + INTERVAL '4 days'`);
+    for (const u of p3.rows) await sendEmail(u.email, 'Your Clarity Console subscription expires in 3 days', subscriptionReminderHtml(u.subscription_plan, 3));
+
+    console.log('Reminders sent:', t1.rows.length + t2.rows.length + p3.rows.length, 'emails');
+  } catch (err) { console.error('Expiry reminder error:', err); }
+}
+
+setInterval(sendExpiryReminders, 24*60*60*1000);
+setTimeout(sendExpiryReminders, 5*60*1000);
+
 // ---------- MIDDLEWARE ----------
+
 app.use(express.json());
 app.use('/api/stripe/webhook', express.raw({ type: 'application/json' }));
 app.use('/api/gumroad/webhook', express.urlencoded({ extended: true }));
@@ -288,74 +163,35 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(session({
   store: new pgSession({ pool, tableName: 'session', createTableIfMissing: true }),
   secret: process.env.SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false,
-  cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: 30 * 24 * 60 * 60 * 1000 },
+  resave: false, saveUninitialized: false,
+  cookie: { httpOnly: true, secure: true, sameSite: 'none', maxAge: 30*24*60*60*1000 },
 }));
 
-function requireAuth(req, res, next) {
-  if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' });
-  next();
-}
-function requireAdmin(req, res, next) {
-  if (!req.session.isAdmin) return res.status(401).json({ error: 'Admin access required' });
-  next();
-}
+function requireAuth(req, res, next) { if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' }); next(); }
+function requireAdmin(req, res, next) { if (!req.session.isAdmin) return res.status(401).json({ error: 'Admin access required' }); next(); }
 
 // ---------- AUTH ----------
 
 app.post('/api/signup', async (req, res) => {
   try {
     const { email, password } = req.body;
-    if (!email || !password || password.length < 8) {
-      return res.status(400).json({ error: 'Email and a password of at least 8 characters are required.' });
-    }
+    if (!email || !password || password.length < 8) return res.status(400).json({ error: 'Email and a password of at least 8 characters are required.' });
     const normalizedEmail = String(email).trim().toLowerCase();
     const existing = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
-    if (existing.rows.length > 0) {
-      return res.status(409).json({ error: 'An account with this email already exists. Try logging in instead.' });
-    }
+    if (existing.rows.length > 0) return res.status(409).json({ error: 'An account with this email already exists. Try logging in instead.' });
     const passwordHash = await bcrypt.hash(password, 12);
-    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS * 24 * 60 * 60 * 1000);
+    const trialEndsAt = new Date(Date.now() + TRIAL_DAYS*24*60*60*1000);
     const result = await pool.query(
-      `INSERT INTO users (email, password_hash, last_login, trial_ends_at, subscription_status)
-       VALUES ($1, $2, NOW(), $3, 'trial') RETURNING id`,
+      `INSERT INTO users (email, password_hash, last_login, trial_ends_at, subscription_status) VALUES ($1, $2, NOW(), $3, 'trial') RETURNING id`,
       [normalizedEmail, passwordHash, trialEndsAt]
     );
     const userId = result.rows[0].id;
     await pool.query('INSERT INTO user_data (user_id, data) VALUES ($1, $2)', [userId, JSON.stringify({})]);
     req.session.userId = userId;
     req.session.email = normalizedEmail;
-    // Send welcome email before session save
-    console.log(`Signup complete for ${normalizedEmail} - sending welcome email`);
-    sendEmail(
-      normalizedEmail,
-      'Welcome to The Clarity Console™ — your 4-day trial starts now!',
-      `<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Inter,Arial,sans-serif;">
-<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-  <div style="background:#1f3148;padding:28px 32px;">
-    <div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console™</div>
-    <div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;letter-spacing:1px;">E-SERVICES BY MEL™</div>
-  </div>
-  <div style="padding:32px;">
-    <h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Welcome! Your 4-day free trial starts now. 🎉</h2>
-    <p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">You now have full access to The Clarity Console™ — 8 financial clarity tools that translate your business numbers into plain English.</p>
-    <div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">
-      <div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Start here:</div>
-      <p style="color:#4a5568;font-size:14px;margin:0 0 8px;">📥 <strong>If you use QuickBooks</strong> — click "Import from QuickBooks" in the sidebar, export any report as CSV, and upload it. Your fields populate automatically.</p>
-      <p style="color:#4a5568;font-size:14px;margin:0;">💡 <strong>If you don't use QuickBooks</strong> — start with Tool 1: Cash Truth Check. Just 5 numbers and you'll instantly see where your cash is going.</p>
-    </div>
-    <a href="${APP_URL}" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Go to My Dashboard →</a>
-    <p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">Your trial ends in 4 days. Questions? Reply to this email.</p>
-  </div>
-  <div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;border-top:1px solid #e3ddd0;">
-    © 2026 E-SERVICES BY MEL™ | The Clarity Console™ | All rights reserved.
-  </div>
-</div>
-</body></html>`
-    ).then(() => console.log(`Welcome email sent to ${normalizedEmail}`))
-     .catch(err => console.error(`Welcome email error for ${normalizedEmail}:`, err.message));
-
+    // Send welcome email immediately (non-blocking)
+    console.log('Sending welcome email to:', normalizedEmail);
+    sendEmail(normalizedEmail, 'Welcome to The Clarity Console - your 4-day trial starts now!', welcomeEmailHtml());
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Account created but session failed. Please log in.' });
       res.json({ ok: true, email: normalizedEmail, trialDays: TRIAL_DAYS });
@@ -388,43 +224,25 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
-app.post('/api/logout', (req, res) => {
-  req.session.destroy(() => res.json({ ok: true }));
-});
+app.post('/api/logout', (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
 
 app.get('/api/me', async (req, res) => {
   if (!req.session.userId) return res.json({ loggedIn: false });
   try {
-    const result = await pool.query(
-      'SELECT id, email, subscription_status, subscription_plan, trial_ends_at, access_expires_at FROM users WHERE id = $1',
-      [req.session.userId]
-    );
+    const result = await pool.query('SELECT id,email,subscription_status,subscription_plan,trial_ends_at,access_expires_at FROM users WHERE id=$1', [req.session.userId]);
     if (!result.rows.length) return res.json({ loggedIn: false });
     const user = result.rows[0];
-    const active = hasAccess(user);
-    const trialDays = daysLeftInTrial(user);
-    res.json({
-      loggedIn: true,
-      email: req.session.email,
-      hasAccess: active,
-      status: user.subscription_status,
-      plan: user.subscription_plan,
-      trialDaysLeft: trialDays,
-    });
-  } catch (err) {
-    res.json({ loggedIn: true, email: req.session.email, hasAccess: true });
-  }
+    res.json({ loggedIn: true, email: req.session.email, hasAccess: hasAccess(user), status: user.subscription_status, plan: user.subscription_plan, trialDaysLeft: daysLeftInTrial(user) });
+  } catch (err) { res.json({ loggedIn: true, email: req.session.email, hasAccess: true }); }
 });
 
 // ---------- DATA ----------
 
 app.get('/api/data', requireAuth, async (req, res) => {
   try {
-    const result = await pool.query('SELECT data FROM user_data WHERE user_id = $1', [req.session.userId]);
+    const result = await pool.query('SELECT data FROM user_data WHERE user_id=$1', [req.session.userId]);
     res.json({ data: result.rows[0] ? result.rows[0].data : {} });
-  } catch (err) {
-    res.status(500).json({ error: 'Could not load data.' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Could not load data.' }); }
 });
 
 app.put('/api/data', requireAuth, async (req, res) => {
@@ -434,180 +252,116 @@ app.put('/api/data', requireAuth, async (req, res) => {
     const toolsUsed = Object.keys(data).filter(k => data[k] && Object.keys(data[k]).length > 0);
     if (toolsUsed.length > 0) {
       await pool.query(
-        `UPDATE users SET tools_used = (SELECT ARRAY(SELECT DISTINCT unnest(tools_used || $2::text[]))) WHERE id = $1`,
+        'UPDATE users SET tools_used = (SELECT ARRAY(SELECT DISTINCT unnest(tools_used || $2::text[]))) WHERE id=$1',
         [req.session.userId, toolsUsed]
       );
     }
     await pool.query(
-      `INSERT INTO user_data (user_id, data, updated_at) VALUES ($1, $2, NOW())
-       ON CONFLICT (user_id) DO UPDATE SET data = $2, updated_at = NOW()`,
+      'INSERT INTO user_data (user_id, data, updated_at) VALUES ($1, $2, NOW()) ON CONFLICT (user_id) DO UPDATE SET data=$2, updated_at=NOW()',
       [req.session.userId, JSON.stringify(data)]
     );
     res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Could not save data.' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Could not save data.' }); }
 });
 
 // ---------- STRIPE ----------
 
 app.get('/api/founding-count', async (req, res) => {
   try {
-    const result = await pool.query(`SELECT COUNT(*) FROM users WHERE subscription_plan = 'founding'`);
+    const result = await pool.query("SELECT COUNT(*) FROM users WHERE subscription_plan='founding'");
     const count = parseInt(result.rows[0].count);
     res.json({ count, limit: FOUNDING_MEMBER_LIMIT, available: count < FOUNDING_MEMBER_LIMIT });
-  } catch (err) {
-    res.json({ count: 0, limit: FOUNDING_MEMBER_LIMIT, available: true });
-  }
+  } catch (err) { res.json({ count: 0, limit: FOUNDING_MEMBER_LIMIT, available: true }); }
 });
 
 app.post('/api/stripe/checkout', requireAuth, async (req, res) => {
   try {
     const { plan } = req.body;
     if (!PRICES[plan]) return res.status(400).json({ error: 'Invalid plan.' });
-    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') {
-      return res.status(503).json({ error: 'Payment system not configured yet.' });
-    }
+    if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY === 'sk_test_placeholder') return res.status(503).json({ error: 'Payment system not configured yet.' });
     if (plan === 'founding') {
-      const countResult = await pool.query(`SELECT COUNT(*) FROM users WHERE subscription_plan = 'founding'`);
-      if (parseInt(countResult.rows[0].count) >= FOUNDING_MEMBER_LIMIT) {
-        return res.status(400).json({ error: 'Founding member spots are sold out.' });
-      }
+      const c = await pool.query("SELECT COUNT(*) FROM users WHERE subscription_plan='founding'");
+      if (parseInt(c.rows[0].count) >= FOUNDING_MEMBER_LIMIT) return res.status(400).json({ error: 'Founding member spots are sold out.' });
     }
-    const userResult = await pool.query('SELECT stripe_customer_id, email FROM users WHERE id = $1', [req.session.userId]);
+    const userResult = await pool.query('SELECT stripe_customer_id,email FROM users WHERE id=$1', [req.session.userId]);
     const user = userResult.rows[0];
     let customerId = user.stripe_customer_id;
     if (!customerId) {
       const customer = await stripe.customers.create({ email: user.email });
       customerId = customer.id;
-      await pool.query('UPDATE users SET stripe_customer_id = $1 WHERE id = $2', [customerId, req.session.userId]);
+      await pool.query('UPDATE users SET stripe_customer_id=$1 WHERE id=$2', [customerId, req.session.userId]);
     }
     const isRecurring = plan === 'monthly' || plan === 'annual';
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
       line_items: [{ price: PRICES[plan], quantity: 1 }],
       mode: isRecurring ? 'subscription' : 'payment',
-      success_url: `${APP_URL}/payment-success.html?plan=${plan}`,
-      cancel_url: `${APP_URL}/paywall.html`,
+      success_url: APP_URL + '/payment-success.html?plan=' + plan,
+      cancel_url: APP_URL + '/paywall.html',
       metadata: { userId: req.session.userId.toString(), plan },
     });
     res.json({ url: session.url });
   } catch (err) {
-    console.error('Checkout error full details:', {
-      message: err.message, type: err.type, code: err.code,
-      param: err.param, statusCode: err.statusCode, rawType: err.rawType,
-    });
+    console.error('Checkout error:', { message: err.message, type: err.type, code: err.code, statusCode: err.statusCode });
     res.status(500).json({ error: 'Could not create checkout session.' });
   }
 });
 
-// Grant access helper
 async function grantSubscriptionAccess(userId, plan) {
   if (plan === 'monthly') {
-    const accessExpiresAt = new Date(Date.now() + 32 * 24 * 60 * 60 * 1000);
-    await pool.query(
-      `UPDATE users SET subscription_status='active', subscription_plan='monthly', access_expires_at=$1 WHERE id=$2`,
-      [accessExpiresAt, userId]
-    );
+    const exp = new Date(Date.now() + 32*24*60*60*1000);
+    await pool.query("UPDATE users SET subscription_status='active', subscription_plan='monthly', access_expires_at=$1 WHERE id=$2", [exp, userId]);
   } else if (plan === 'annual') {
-    const accessExpiresAt = new Date(Date.now() + 366 * 24 * 60 * 60 * 1000);
-    await pool.query(
-      `UPDATE users SET subscription_status='active', subscription_plan='annual', access_expires_at=$1 WHERE id=$2`,
-      [accessExpiresAt, userId]
-    );
+    const exp = new Date(Date.now() + 366*24*60*60*1000);
+    await pool.query("UPDATE users SET subscription_status='active', subscription_plan='annual', access_expires_at=$1 WHERE id=$2", [exp, userId]);
   } else {
-    // lifetime or founding
-    await pool.query(
-      `UPDATE users SET subscription_status='lifetime', subscription_plan=$1, access_expires_at=NULL WHERE id=$2`,
-      [plan, userId]
-    );
+    await pool.query("UPDATE users SET subscription_status='lifetime', subscription_plan=$1, access_expires_at=NULL WHERE id=$2", [plan, userId]);
   }
 }
 
 app.post('/api/stripe/webhook', async (req, res) => {
   const sig = req.headers['stripe-signature'];
   let event;
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (err) {
-    console.error('Webhook error:', err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+  try { event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET); }
+  catch (err) { console.error('Webhook error:', err.message); return res.status(400).send('Webhook Error: ' + err.message); }
   try {
     if (event.type === 'checkout.session.completed') {
-      const session = event.data.object;
-      const userId = parseInt(session.metadata.userId);
-      const plan = session.metadata.plan;
-      await grantSubscriptionAccess(userId, plan);
-      console.log(`Access granted: userId=${userId} plan=${plan}`);
-    }
-    if (event.type === 'invoice.payment_succeeded') {
-      const invoice = event.data.object;
-      if (invoice.subscription) {
-        const sub = await stripe.subscriptions.retrieve(invoice.subscription);
-        const userId = parseInt(sub.metadata?.userId || '0');
-        if (userId) {
-          const plan = sub.metadata?.plan || 'monthly';
-          await grantSubscriptionAccess(userId, plan);
-        }
-      }
+      const s = event.data.object;
+      await grantSubscriptionAccess(parseInt(s.metadata.userId), s.metadata.plan);
     }
     if (event.type === 'customer.subscription.deleted') {
-      const sub = event.data.object;
-      await pool.query(
-        `UPDATE users SET subscription_status='expired' WHERE stripe_subscription_id=$1`,
-        [sub.id]
-      );
+      await pool.query("UPDATE users SET subscription_status='expired' WHERE stripe_subscription_id=$1", [event.data.object.id]);
     }
-  } catch (err) {
-    console.error('Webhook processing error:', err);
-  }
+  } catch (err) { console.error('Webhook processing error:', err); }
   res.json({ received: true });
 });
 
 // ---------- GUMROAD WEBHOOK ----------
-// Gumroad sends a POST ping when a sale is made
+
 app.post('/api/gumroad/webhook', async (req, res) => {
   try {
     const { email, product_name, sale_id } = req.body;
     if (!email) return res.status(400).json({ error: 'No email provided' });
-
     const normalizedEmail = String(email).trim().toLowerCase();
-
-    // Detect plan from product name
     let plan = 'monthly';
     const name = (product_name || '').toLowerCase();
     if (name.includes('founding')) plan = 'founding';
     else if (name.includes('lifetime')) plan = 'lifetime';
     else if (name.includes('annual') || name.includes('yearly')) plan = 'annual';
-    else if (name.includes('monthly')) plan = 'monthly';
-
-    // Find user by email
-    let userResult = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
-
+    let userResult = await pool.query('SELECT id FROM users WHERE email=$1', [normalizedEmail]);
     if (userResult.rows.length === 0) {
-      // User hasn't signed up yet — create a pending account
-      // They'll set their password when they click the access link
       const tempPassword = await bcrypt.hash(sale_id || Math.random().toString(36), 12);
       const result = await pool.query(
-        `INSERT INTO users (email, password_hash, created_at, subscription_status, subscription_plan)
-         VALUES ($1, $2, NOW(), 'pending', $3) RETURNING id`,
+        "INSERT INTO users (email,password_hash,created_at,subscription_status,subscription_plan) VALUES ($1,$2,NOW(),'pending',$3) RETURNING id",
         [normalizedEmail, tempPassword, plan]
       );
-      await pool.query('INSERT INTO user_data (user_id, data) VALUES ($1, $2)', [result.rows[0].id, JSON.stringify({})]);
+      await pool.query('INSERT INTO user_data (user_id,data) VALUES ($1,$2)', [result.rows[0].id, JSON.stringify({})]);
       userResult = { rows: [{ id: result.rows[0].id }] };
-      console.log(`Gumroad: New user created for ${normalizedEmail}`);
     }
-
-    const userId = userResult.rows[0].id;
-    await grantSubscriptionAccess(userId, plan);
-    console.log(`Gumroad: Access granted to ${normalizedEmail} plan=${plan}`);
-
+    await grantSubscriptionAccess(userResult.rows[0].id, plan);
+    console.log('Gumroad: Access granted to', normalizedEmail, 'plan:', plan);
     res.json({ ok: true });
-  } catch (err) {
-    console.error('Gumroad webhook error:', err);
-    res.status(500).json({ error: 'Webhook processing failed' });
-  }
+  } catch (err) { console.error('Gumroad webhook error:', err); res.status(500).json({ error: 'Webhook processing failed' }); }
 });
 
 // ---------- ADMIN ----------
@@ -617,84 +371,48 @@ app.post('/api/admin/login', async (req, res) => {
   if (!ADMIN_PASSWORD) return res.status(503).json({ error: 'Admin not configured. Set ADMIN_PASSWORD in Render.' });
   if (username === ADMIN_USER && password === ADMIN_PASSWORD) {
     req.session.isAdmin = true;
-    req.session.save((err) => {
-      if (err) return res.status(500).json({ error: 'Session error' });
-      res.json({ ok: true });
-    });
-  } else {
-    res.status(401).json({ error: 'Invalid admin credentials' });
-  }
+    req.session.save((err) => { if (err) return res.status(500).json({ error: 'Session error' }); res.json({ ok: true }); });
+  } else { res.status(401).json({ error: 'Invalid admin credentials' }); }
 });
 
-app.post('/api/admin/logout', (req, res) => {
-  req.session.isAdmin = false;
-  req.session.save(() => res.json({ ok: true }));
-});
+app.post('/api/admin/logout', (req, res) => { req.session.isAdmin = false; req.session.save(() => res.json({ ok: true })); });
 
 app.get('/api/admin/users', requireAdmin, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT u.id, u.email, u.created_at, u.last_login, u.tools_used,
-             u.subscription_status, u.subscription_plan, u.trial_ends_at,
-             u.access_expires_at, ud.updated_at as last_saved
-      FROM users u
-      LEFT JOIN user_data ud ON u.id = ud.user_id
-      ORDER BY u.created_at DESC
-    `);
+    const result = await pool.query(`SELECT u.id,u.email,u.created_at,u.last_login,u.tools_used,u.subscription_status,u.subscription_plan,u.trial_ends_at,u.access_expires_at,ud.updated_at as last_saved FROM users u LEFT JOIN user_data ud ON u.id=ud.user_id ORDER BY u.created_at DESC`);
     res.json({ users: result.rows });
-  } catch (err) {
-    res.status(500).json({ error: 'Could not load users.' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Could not load users.' }); }
 });
 
 app.post('/api/admin/grant-access', requireAdmin, async (req, res) => {
   const { userId, plan } = req.body;
-  try {
-    await grantSubscriptionAccess(userId, plan || 'lifetime');
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Could not grant access.' });
-  }
+  try { await grantSubscriptionAccess(userId, plan || 'lifetime'); res.json({ ok: true }); }
+  catch (err) { res.status(500).json({ error: 'Could not grant access.' }); }
 });
 
 app.post('/api/admin/extend-trial', requireAdmin, async (req, res) => {
   const { userId, days } = req.body;
   try {
-    await pool.query(
-      `UPDATE users SET trial_ends_at = GREATEST(trial_ends_at, NOW()) + ($1 || ' days')::interval WHERE id=$2`,
-      [days || 7, userId]
-    );
+    await pool.query("UPDATE users SET trial_ends_at = GREATEST(trial_ends_at, NOW()) + ($1 || ' days')::interval WHERE id=$2", [days||7, userId]);
     res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Could not extend trial.' });
-  }
+  } catch (err) { res.status(500).json({ error: 'Could not extend trial.' }); }
 });
 
-// Test email endpoint — admin only
 app.get('/api/admin/test-email', requireAdmin, async (req, res) => {
   const testTo = req.query.to || 'info@e-servicesbymel.com';
   try {
-    const result = await resend.emails.send({
-      from: `E-SERVICES BY MEL <${FROM_EMAIL}>`,
-      to: testTo,
-      subject: 'Test email from Clarity Console',
-      html: '<p>This is a test email from The Clarity Console™. If you received this, email sending is working correctly!</p>'
-    });
+    const result = await resend.emails.send({ from: `E-SERVICES BY MEL <${FROM_EMAIL}>`, to: testTo, subject: 'Test email from Clarity Console', html: '<p>Email sending is working correctly!</p>' });
     console.log('Test email result:', JSON.stringify(result));
     res.json({ ok: true, result });
-  } catch (err) {
-    console.error('Test email error:', err);
-    res.status(500).json({ error: err.message, details: err });
-  }
+  } catch (err) { console.error('Test email error:', err); res.status(500).json({ error: err.message }); }
 });
+
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/paywall', (req, res) => res.sendFile(path.join(__dirname, 'public', 'paywall.html')));
 app.get('/payment-success', (req, res) => res.sendFile(path.join(__dirname, 'public', 'payment-success.html')));
-
-app.get('/*splat', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('/*splat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 app.listen(PORT, async () => {
-  console.log(`Clarity Console running on port ${PORT}`);
+  console.log('Clarity Console running on port', PORT);
   try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
 });
