@@ -784,14 +784,22 @@
   function renderBreakevenBar(revenue, fixedCosts, grossMarginPct) {
     if (!fixedCosts || !grossMarginPct) return '';
     var breakeven = fixedCosts / (grossMarginPct/100);
+    var w = 280, bH = 20;
+    if (!revenue) {
+      return svg(w, 60,
+        '<text x="0" y="14" font-size="11" fill="'+C.inkSoft+'">Break-even Progress</text>'
+        + '<rect x="0" y="22" width="'+w+'" height="'+bH+'" rx="10" fill="'+C.line+'"/>'
+        + '<text x="'+(w/2)+'" y="55" text-anchor="middle" font-size="11" fill="'+C.amber+'">Enter revenue in Cash Truth Check to see progress</text>'
+        + '<text x="0" y="55" font-size="10" fill="'+C.inkSoft+'">Target: '+fmt(breakeven)+'</text>'
+      );
+    }
     var pct = Math.min(1, revenue/breakeven);
     var color = pct >= 1 ? C.good : pct >= 0.7 ? C.watch : C.danger;
-    var w = 280, bH = 20;
     var content = ''
       + '<text x="0" y="14" font-size="11" fill="'+C.inkSoft+'">Break-even Progress</text>'
       + '<rect x="0" y="22" width="'+w+'" height="'+bH+'" rx="10" fill="'+C.line+'"/>'
       + '<rect x="0" y="22" width="'+(pct*w)+'" height="'+bH+'" rx="10" fill="'+color+'"/>'
-      + '<text x="'+(pct*w+6)+'" y="37" font-size="10" fill="'+color+'" font-weight="700">'+Math.round(pct*100)+'%</text>'
+      + '<text x="'+(Math.min(pct*w+6, w-30))+'" y="37" font-size="10" fill="'+color+'" font-weight="700">'+Math.round(pct*100)+'%</text>'
       + '<text x="0" y="58" font-size="10" fill="'+C.inkSoft+'">Target: '+fmt(breakeven)+'</text>'
       + '<text x="'+w+'" y="58" text-anchor="end" font-size="10" fill="'+C.ink+'" font-weight="700">Current: '+fmt(revenue)+'</text>'
       + (pct >= 1
@@ -1019,7 +1027,8 @@
         var fixed = getFieldValue('breakeven','fixed');
         var price = getFieldValue('breakeven','price');
         var cost  = getFieldValue('breakeven','cost');
-        var rev   = getFieldValue('pnl','revenue') || getFieldValue('truth','revenue');
+        // Get revenue from any tool that has it
+        var rev = getFieldValue('truth','revenue') || getFieldValue('pnl','revenue') || getFieldValue('snapshot','revenue');
         var gm = price > 0 ? ((price-cost)/price)*100 : 60;
         var chartDiv = document.createElement('div');
         chartDiv.className = 'chart-injected';
