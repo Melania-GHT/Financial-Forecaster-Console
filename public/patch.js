@@ -786,11 +786,11 @@
     var breakeven = fixedCosts / (grossMarginPct/100);
     var w = 280, bH = 20;
     if (!revenue) {
-      return svg(w, 75,
+      return svg(w, 85,
         '<text x="0" y="14" font-size="11" fill="'+C.inkSoft+'">Break-even Progress</text>'
         + '<rect x="0" y="22" width="'+w+'" height="'+bH+'" rx="10" fill="'+C.line+'"/>'
         + '<text x="0" y="58" font-size="10" fill="'+C.inkSoft+'">Target: '+fmt(breakeven)+'</text>'
-        + '<text x="'+w+'" y="58" text-anchor="end" font-size="10" fill="'+C.amber+'">Enter revenue in Cash Truth Check to track progress</text>'
+        + '<text x="0" y="76" font-size="10" fill="'+C.amber+'">→ Enter revenue in Cash Truth Check to track your progress</text>'
       );
     }
     var pct = Math.min(1, revenue/breakeven);
