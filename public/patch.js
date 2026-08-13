@@ -310,6 +310,45 @@
     setTimeout(addTrademark, 1500);
     setTimeout(addTrademark, 3000);
 
+    // Fix 11: Universal field labels — work for both product AND service businesses
+    var UNIVERSAL_LABELS = {
+      'cost of goods sold':          'Cost of Sales (Products/Services)',
+      'average price per sale/unit': 'Average Revenue per Sale/Client',
+      'average cost per sale/unit':  'Average Cost per Sale/Client',
+      'cogs':                        'Cost of Sales',
+      'total revenue':               'Total Revenue (Sales & Fees)',
+      'revenue':                     'Revenue (Sales & Service Fees)',
+      'operating expenses':          'Operating Expenses (Overhead)',
+    };
+
+    function updateFieldLabels() {
+      document.querySelectorAll('label').forEach(function(label) {
+        var text = label.textContent.trim().toLowerCase();
+        Object.keys(UNIVERSAL_LABELS).forEach(function(key) {
+          if (text === key) label.textContent = UNIVERSAL_LABELS[key];
+        });
+      });
+    }
+
+    // Apply on load and after every tool re-render
+    updateFieldLabels();
+
+    var origRenderTool = window.renderTool;
+    if (typeof origRenderTool === 'function') {
+      window.renderTool = function() {
+        origRenderTool();
+        setTimeout(updateFieldLabels, 50);
+      };
+    }
+
+    // Re-apply when tool container changes
+    var labelObserver = new MutationObserver(function(mutations) {
+      var hasNew = mutations.some(function(m) { return m.addedNodes.length > 0; });
+      if (hasNew) setTimeout(updateFieldLabels, 50);
+    });
+    var tc = document.getElementById('tool-container');
+    if (tc) labelObserver.observe(tc, { childList: true, subtree: true });
+
     console.log('[patch.js] All fixes applied successfully.');
   });
 })();
