@@ -410,12 +410,6 @@ app.get('/api/admin/test-email', requireAdmin, async (req, res) => {
 app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
 app.get('/paywall', (req, res) => res.sendFile(path.join(__dirname, 'public', 'paywall.html')));
 app.get('/payment-success', (req, res) => res.sendFile(path.join(__dirname, 'public', 'payment-success.html')));
-app.get('/*splat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-app.listen(PORT, async () => {
-  console.log('Clarity Console running on port', PORT);
-  try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
-});
 
 // ============================================================
 // QUICKBOOKS OAUTH INTEGRATION
@@ -693,4 +687,11 @@ app.post('/api/qb/disconnect', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Could not disconnect.' });
   }
+});
+
+app.get('/*splat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+app.listen(PORT, async () => {
+  console.log('Clarity Console running on port', PORT);
+  try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
 });
