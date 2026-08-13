@@ -1204,7 +1204,7 @@
 // ============================================================
 (function() {
   function addQBConnectButton() {
-    if (document.getElementById('qb-connect-btn')) return;
+    if (document.getElementById('qb-connect-wrapper')) return;
     var sidebar = document.querySelector('.sidebar');
     if (!sidebar) return;
 
@@ -1307,7 +1307,6 @@
     if (!window._patchApplied) { setTimeout(init, 200); return; }
     checkQBCallback();
     addQBConnectButton();
-    setTimeout(addQBConnectButton, 1500);
   }
   init();
 })();
