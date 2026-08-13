@@ -416,3 +416,281 @@ app.listen(PORT, async () => {
   console.log('Clarity Console running on port', PORT);
   try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
 });
+
+// ============================================================
+// QUICKBOOKS OAUTH INTEGRATION
+// ============================================================
+
+const https = require('https');
+const QB_CLIENT_ID = process.env.QB_CLIENT_ID;
+const QB_CLIENT_SECRET = process.env.QB_CLIENT_SECRET;
+const QB_ENVIRONMENT = process.env.QB_ENVIRONMENT || 'sandbox';
+const QB_REDIRECT_URI = (process.env.APP_URL || 'https://financial-forecaster-console-3.onrender.com') + '/api/qb/callback';
+const QB_SCOPES = 'com.intuit.quickbooks.accounting';
+const QB_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2';
+const QB_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer';
+const QB_BASE_URL = QB_ENVIRONMENT === 'sandbox'
+  ? 'https://sandbox-quickbooks.api.intuit.com'
+  : 'https://quickbooks.api.intuit.com';
+
+// Store QB tokens in database
+async function saveQBTokens(userId, tokens) {
+  await pool.query(
+    `UPDATE users SET
+      qb_access_token = $1,
+      qb_refresh_token = $2,
+      qb_realm_id = $3,
+      qb_token_expires_at = $4
+    WHERE id = $5`,
+    [tokens.access_token, tokens.refresh_token, tokens.realm_id,
+     new Date(Date.now() + tokens.expires_in * 1000), userId]
+  ).catch(() => {
+    // Columns might not exist yet — add them
+    return pool.query(`
+      ALTER TABLE users
+        ADD COLUMN IF NOT EXISTS qb_access_token TEXT,
+        ADD COLUMN IF NOT EXISTS qb_refresh_token TEXT,
+        ADD COLUMN IF NOT EXISTS qb_realm_id TEXT,
+        ADD COLUMN IF NOT EXISTS qb_token_expires_at TIMESTAMP
+    `).then(() => pool.query(
+      `UPDATE users SET qb_access_token=$1, qb_refresh_token=$2, qb_realm_id=$3, qb_token_expires_at=$4 WHERE id=$5`,
+      [tokens.access_token, tokens.refresh_token, tokens.realm_id,
+       new Date(Date.now() + tokens.expires_in * 1000), userId]
+    ));
+  });
+}
+
+async function getQBTokens(userId) {
+  try {
+    const result = await pool.query(
+      'SELECT qb_access_token, qb_refresh_token, qb_realm_id, qb_token_expires_at FROM users WHERE id=$1',
+      [userId]
+    );
+    return result.rows[0] || null;
+  } catch { return null; }
+}
+
+async function refreshQBToken(userId, refreshToken) {
+  return new Promise((resolve, reject) => {
+    const credentials = Buffer.from(`${QB_CLIENT_ID}:${QB_CLIENT_SECRET}`).toString('base64');
+    const body = `grant_type=refresh_token&refresh_token=${encodeURIComponent(refreshToken)}`;
+    const req = https.request({
+      hostname: 'oauth.platform.intuit.com',
+      path: '/oauth2/v1/tokens/bearer',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Authorization': `Basic ${credentials}`,
+        'Content-Length': Buffer.byteLength(body),
+      }
+    }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', async () => {
+        try {
+          const tokens = JSON.parse(data);
+          if (tokens.access_token) {
+            await saveQBTokens(userId, { ...tokens, realm_id: (await getQBTokens(userId)).qb_realm_id });
+            resolve(tokens.access_token);
+          } else { reject(new Error('Token refresh failed: ' + data)); }
+        } catch(e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+async function getValidQBToken(userId) {
+  const tokens = await getQBTokens(userId);
+  if (!tokens || !tokens.qb_access_token) return null;
+  if (tokens.qb_token_expires_at && new Date(tokens.qb_token_expires_at) > new Date(Date.now() + 60000)) {
+    return { accessToken: tokens.qb_access_token, realmId: tokens.qb_realm_id };
+  }
+  if (tokens.qb_refresh_token) {
+    const newToken = await refreshQBToken(userId, tokens.qb_refresh_token);
+    return { accessToken: newToken, realmId: tokens.qb_realm_id };
+  }
+  return null;
+}
+
+function qbApiCall(accessToken, realmId, path) {
+  return new Promise((resolve, reject) => {
+    const hostname = QB_ENVIRONMENT === 'sandbox'
+      ? 'sandbox-quickbooks.api.intuit.com'
+      : 'quickbooks.api.intuit.com';
+    const req = https.request({
+      hostname,
+      path: `/v3/company/${realmId}${path}?minorversion=65`,
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Accept': 'application/json',
+      }
+    }, res => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => {
+        try { resolve(JSON.parse(data)); }
+        catch(e) { reject(e); }
+      });
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
+// Step 1: Redirect user to Intuit authorization page
+app.get('/api/qb/connect', requireAuth, (req, res) => {
+  if (!QB_CLIENT_ID) return res.status(503).json({ error: 'QuickBooks not configured' });
+  const state = req.session.userId + '_' + Date.now();
+  req.session.qbState = state;
+  const params = new URLSearchParams({
+    client_id: QB_CLIENT_ID,
+    redirect_uri: QB_REDIRECT_URI,
+    response_type: 'code',
+    scope: QB_SCOPES,
+    state,
+  });
+  res.redirect(`${QB_AUTH_URL}?${params.toString()}`);
+});
+
+// Step 2: Handle OAuth callback from Intuit
+app.get('/api/qb/callback', async (req, res) => {
+  const { code, state, realmId, error } = req.query;
+  if (error) return res.redirect('/?qb_error=' + encodeURIComponent(error));
+  if (!req.session.userId) return res.redirect('/');
+
+  try {
+    const credentials = Buffer.from(`${QB_CLIENT_ID}:${QB_CLIENT_SECRET}`).toString('base64');
+    const body = `grant_type=authorization_code&code=${encodeURIComponent(code)}&redirect_uri=${encodeURIComponent(QB_REDIRECT_URI)}`;
+
+    const tokens = await new Promise((resolve, reject) => {
+      const postReq = https.request({
+        hostname: 'oauth.platform.intuit.com',
+        path: '/oauth2/v1/tokens/bearer',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Authorization': `Basic ${credentials}`,
+          'Content-Length': Buffer.byteLength(body),
+        }
+      }, postRes => {
+        let data = '';
+        postRes.on('data', chunk => data += chunk);
+        postRes.on('end', () => {
+          try { resolve(JSON.parse(data)); }
+          catch(e) { reject(e); }
+        });
+      });
+      postReq.on('error', reject);
+      postReq.write(body);
+      postReq.end();
+    });
+
+    await saveQBTokens(req.session.userId, { ...tokens, realm_id: realmId });
+    console.log(`QB connected for userId=${req.session.userId} realmId=${realmId}`);
+    res.redirect('/?qb_connected=1');
+  } catch (err) {
+    console.error('QB callback error:', err);
+    res.redirect('/?qb_error=callback_failed');
+  }
+});
+
+// Step 3: Get QB connection status
+app.get('/api/qb/status', requireAuth, async (req, res) => {
+  const tokens = await getQBTokens(req.session.userId);
+  res.json({
+    connected: !!(tokens && tokens.qb_access_token && tokens.qb_realm_id),
+    realmId: tokens ? tokens.qb_realm_id : null,
+  });
+});
+
+// Step 4: Import data from QuickBooks
+app.get('/api/qb/import', requireAuth, async (req, res) => {
+  try {
+    const tokenData = await getValidQBToken(req.session.userId);
+    if (!tokenData) return res.status(401).json({ error: 'QuickBooks not connected. Please connect first.' });
+
+    const { accessToken, realmId } = tokenData;
+
+    // Fetch P&L, Balance Sheet, Cash Flow in parallel
+    const [pnlData, bsData, cfData] = await Promise.allSettled([
+      qbApiCall(accessToken, realmId, '/reports/ProfitAndLoss'),
+      qbApiCall(accessToken, realmId, '/reports/BalanceSheet'),
+      qbApiCall(accessToken, realmId, '/reports/CashFlow'),
+    ]);
+
+    const extracted = {};
+
+    // Parse P&L
+    if (pnlData.status === 'fulfilled' && pnlData.value.Rows) {
+      const rows = pnlData.value.Rows.Row || [];
+      const findValue = (rows, label) => {
+        for (const row of rows) {
+          if (row.Summary && row.Summary.ColData) {
+            const lbl = (row.Summary.ColData[0] && row.Summary.ColData[0].value || '').toLowerCase();
+            if (lbl.includes(label)) {
+              const val = parseFloat((row.Summary.ColData[1] && row.Summary.ColData[1].value) || '0');
+              return isNaN(val) ? 0 : Math.abs(val);
+            }
+          }
+          if (row.Rows) {
+            const found = findValue(row.Rows.Row || [], label);
+            if (found) return found;
+          }
+        }
+        return 0;
+      };
+      extracted.revenue = findValue(rows, 'total income') || findValue(rows, 'total revenue');
+      extracted.cogs = findValue(rows, 'total cost of goods') || findValue(rows, 'total cogs');
+      extracted.opex = findValue(rows, 'total expenses') || findValue(rows, 'total operating');
+      extracted.netIncome = findValue(rows, 'net income') || findValue(rows, 'net profit');
+    }
+
+    // Parse Balance Sheet
+    if (bsData.status === 'fulfilled' && bsData.value.Rows) {
+      const rows = bsData.value.Rows.Row || [];
+      const findValue = (rows, label) => {
+        for (const row of rows) {
+          if (row.Summary && row.Summary.ColData) {
+            const lbl = (row.Summary.ColData[0] && row.Summary.ColData[0].value || '').toLowerCase();
+            if (lbl.includes(label)) {
+              const val = parseFloat((row.Summary.ColData[1] && row.Summary.ColData[1].value) || '0');
+              return isNaN(val) ? 0 : Math.abs(val);
+            }
+          }
+          if (row.Rows) {
+            const found = findValue(row.Rows.Row || [], label);
+            if (found) return found;
+          }
+        }
+        return 0;
+      };
+      extracted.bank = findValue(rows, 'checking') || findValue(rows, 'cash and cash');
+      extracted.ar = findValue(rows, 'accounts receivable');
+      extracted.ap = findValue(rows, 'accounts payable');
+      extracted.totalAssets = findValue(rows, 'total assets');
+      extracted.totalLiabilities = findValue(rows, 'total liabilities');
+    }
+
+    res.json({ ok: true, data: extracted });
+  } catch (err) {
+    console.error('QB import error:', err);
+    res.status(500).json({ error: 'Could not import from QuickBooks: ' + err.message });
+  }
+});
+
+// Step 5: Disconnect QuickBooks
+app.post('/api/qb/disconnect', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      'UPDATE users SET qb_access_token=NULL, qb_refresh_token=NULL, qb_realm_id=NULL, qb_token_expires_at=NULL WHERE id=$1',
+      [req.session.userId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Could not disconnect.' });
+  }
+});

@@ -1198,3 +1198,116 @@
   watchForResults();
 
 })();
+
+// ============================================================
+// QUICKBOOKS LIVE CONNECTION UI
+// ============================================================
+(function() {
+  function addQBConnectButton() {
+    if (document.getElementById('qb-connect-btn')) return;
+    var sidebar = document.querySelector('.sidebar');
+    if (!sidebar) return;
+
+    var wrapper = document.createElement('div');
+    wrapper.id = 'qb-connect-wrapper';
+    wrapper.style.cssText = 'margin-top:8px;';
+
+    // Check connection status
+    fetch('/api/qb/status', { credentials: 'include' })
+      .then(r => r.json())
+      .then(status => {
+        if (status.connected) {
+          wrapper.innerHTML = '<div style="padding:10px 12px;background:rgba(92,122,94,0.15);border-radius:9px;border:1px solid rgba(92,122,94,0.4);">'
+            + '<div style="font-size:10px;color:#6b8f71;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">✓ QuickBooks Connected</div>'
+            + '<button onclick="window._qbImport()" style="width:100%;background:#5c7a5e;color:#fff;border:none;padding:7px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:4px;font-family:Inter,sans-serif;">↓ Sync Latest Data</button>'
+            + '<button onclick="window._qbDisconnect()" style="width:100%;background:none;border:1px solid rgba(168,80,62,0.3);color:#a8503e;padding:5px;border-radius:6px;font-size:11px;cursor:pointer;font-family:Inter,sans-serif;">Disconnect</button>'
+            + '</div>';
+        } else {
+          wrapper.innerHTML = '<button id="qb-connect-btn" onclick="window._qbConnect()" style="display:block;width:100%;padding:9px 12px;background:rgba(0,133,55,0.1);border:1px solid rgba(0,133,55,0.3);border-radius:9px;color:#2d9d5c;font-size:12px;font-weight:700;text-align:center;cursor:pointer;font-family:Inter,sans-serif;">'
+            + '<span style="font-size:14px;">⚡</span> Connect QuickBooks Live'
+            + '</button>'
+            + '<div style="font-size:10px;color:#9aa9bb;text-align:center;margin-top:4px;">Auto-sync your real data</div>';
+        }
+      }).catch(() => {});
+
+    sidebar.appendChild(wrapper);
+  }
+
+  window._qbConnect = function() {
+    window.location.href = '/api/qb/connect';
+  };
+
+  window._qbDisconnect = function() {
+    if (!confirm('Disconnect QuickBooks? You can reconnect anytime.')) return;
+    fetch('/api/qb/disconnect', { method: 'POST', credentials: 'include' })
+      .then(() => {
+        var wrapper = document.getElementById('qb-connect-wrapper');
+        if (wrapper) wrapper.remove();
+        setTimeout(addQBConnectButton, 100);
+      });
+  };
+
+  window._qbImport = function() {
+    var btn = document.querySelector('#qb-connect-wrapper button');
+    if (btn) { btn.textContent = 'Syncing...'; btn.disabled = true; }
+
+    fetch('/api/qb/import', { credentials: 'include' })
+      .then(r => r.json())
+      .then(result => {
+        if (!result.ok) { alert(result.error || 'Import failed'); return; }
+        var d = result.data;
+
+        // Populate all fields via updateField
+        if (typeof window.updateField === 'function') {
+          if (d.revenue)   { window.updateField('truth','revenue',String(Math.round(d.revenue))); window.updateField('pnl','revenue',String(Math.round(d.revenue))); window.updateField('snapshot','revenue',String(Math.round(d.revenue))); }
+          if (d.opex)      { window.updateField('truth','expenses',String(Math.round(d.opex))); window.updateField('pnl','opex',String(Math.round(d.opex))); }
+          if (d.cogs)      { window.updateField('pnl','cogs',String(Math.round(d.cogs))); }
+          if (d.bank)      { window.updateField('truth','bank',String(Math.round(d.bank))); window.updateField('lag','cash',String(Math.round(d.bank))); }
+          if (d.ar)        { window.updateField('truth','ar',String(Math.round(d.ar))); }
+          if (d.ap)        { window.updateField('truth','ap',String(Math.round(d.ap))); }
+        }
+
+        // Navigate to Cash Truth Check
+        if (typeof window.goTo === 'function') window.goTo('truth');
+
+        // Show success toast
+        var toast = document.createElement('div');
+        toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#5c7a5e;color:#fff;padding:14px 20px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,0.2);';
+        toast.innerHTML = '✅ QuickBooks data synced successfully!<br><span style="font-size:12px;opacity:0.8;">Revenue, expenses, cash & more updated</span>';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 5000);
+
+        // Reset button
+        if (btn) { btn.textContent = '↓ Sync Latest Data'; btn.disabled = false; }
+      })
+      .catch(err => {
+        alert('Could not connect to QuickBooks: ' + err.message);
+        if (btn) { btn.textContent = '↓ Sync Latest Data'; btn.disabled = false; }
+      });
+  };
+
+  // Check for QB connection success/error on page load
+  function checkQBCallback() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('qb_connected')) {
+      history.replaceState({}, '', '/');
+      var toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:80px;right:24px;background:#5c7a5e;color:#fff;padding:14px 20px;border-radius:10px;font-size:14px;font-weight:600;z-index:9999;';
+      toast.textContent = '✅ QuickBooks connected! Click "Sync Latest Data" to import.';
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+    if (params.get('qb_error')) {
+      history.replaceState({}, '', '/');
+      alert('QuickBooks connection failed: ' + params.get('qb_error'));
+    }
+  }
+
+  function init() {
+    if (!window._patchApplied) { setTimeout(init, 200); return; }
+    checkQBCallback();
+    addQBConnectButton();
+    setTimeout(addQBConnectButton, 1500);
+  }
+  init();
+})();
