@@ -21,19 +21,29 @@
   // Shared field mappings
   var SHARED_FIELDS = {
     revenue: [
-      { tool: 'truth', field: 'revenue' },
-      { tool: 'pnl',   field: 'revenue' },
+      { tool: 'truth',    field: 'revenue' },
+      { tool: 'pnl',      field: 'revenue' },
       { tool: 'snapshot', field: 'revenue' },
+      { tool: 'forecast', field: 'income' },
     ],
     expenses: [
-      { tool: 'truth', field: 'expenses' },
+      { tool: 'truth',    field: 'expenses' },
       { tool: 'snapshot', field: 'expenses' },
-      { tool: 'pnl',   field: 'opex' },
+      { tool: 'pnl',      field: 'opex' },
+      { tool: 'forecast', field: 'expenses' },
+      { tool: 'breakeven',field: 'fixed' },
     ],
     cash: [
-      { tool: 'truth', field: 'bank' },
-      { tool: 'lag',   field: 'cash' },
+      { tool: 'truth',    field: 'bank' },
+      { tool: 'lag',      field: 'cash' },
       { tool: 'snapshot', field: 'cash' },
+    ],
+    ar: [
+      { tool: 'truth',    field: 'ar' },
+      { tool: 'snapshot', field: 'owed' },
+    ],
+    ap: [
+      { tool: 'truth',    field: 'ap' },
     ],
   };
 
@@ -53,14 +63,19 @@
   function syncSharedField(concept, value, sourceTool) {
     var fields = SHARED_FIELDS[concept];
     if (!fields || !value) return;
-    // We can't access currentData directly, but we can use getToolData
-    // via the global renderTool — instead store in a pending sync object
-    // that gets applied when the user navigates to each tool
     if (!window._pendingSync) window._pendingSync = {};
     fields.forEach(function(f) {
       if (f.tool === sourceTool) return;
       if (!window._pendingSync[f.tool]) window._pendingSync[f.tool] = {};
       window._pendingSync[f.tool][f.field] = value;
+      // Also cache in sessionStorage so charts can read across tools
+      try { sessionStorage.setItem('clarity_field_'+f.tool+'_'+f.field, value); } catch(e) {}
+      // If the target input is currently visible, update it immediately
+      var input = document.querySelector('.tool-input[data-tool="'+f.tool+'"][data-key="'+f.field+'"]');
+      if (input) {
+        input.value = value;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      }
     });
   }
 
@@ -236,7 +251,7 @@
         clearTimeout(window._syncTimer);
         window._syncTimer = setTimeout(function() {
           syncSharedField(concept, value, tool);
-        }, 1000);
+        }, 300);
       }
     };
 
