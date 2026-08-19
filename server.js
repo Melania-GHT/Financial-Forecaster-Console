@@ -521,7 +521,7 @@ async function getValidQBToken(userId) {
   return null;
 }
 
-function qbApiCall(accessToken, realmId, path) {
+function qbApiCallOnce(accessToken, realmId, path) {
   return new Promise((resolve, reject) => {
     const hostname = QB_ENVIRONMENT === 'sandbox'
       ? 'sandbox-quickbooks.api.intuit.com'
@@ -538,13 +538,44 @@ function qbApiCall(accessToken, realmId, path) {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
-        try { resolve(JSON.parse(data)); }
-        catch(e) { reject(e); }
+        let parsed;
+        try { parsed = JSON.parse(data); }
+        catch(e) { return reject(Object.assign(new Error('Invalid JSON from QuickBooks API'), { statusCode: res.statusCode })); }
+
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          resolve(parsed);
+        } else {
+          // Surface the real status code so callers can decide whether to retry
+          // (5xx/429 are transient) or fail fast (4xx like 401/403 are not).
+          const err = new Error(`QuickBooks API returned ${res.statusCode}: ${data.slice(0, 300)}`);
+          err.statusCode = res.statusCode;
+          reject(err);
+        }
       });
     });
     req.on('error', reject);
     req.end();
   });
+}
+
+// Retries transient failures (429 rate limit, 5xx server errors, network errors)
+// with a short exponential backoff. Does NOT retry 4xx client errors like 401
+// (bad/expired token) or 400 (bad request) — retrying those just wastes time
+// and hides the real problem, since the request itself won't succeed by trying again.
+async function qbApiCall(accessToken, realmId, path, attempt = 1) {
+  const MAX_ATTEMPTS = 3;
+  try {
+    return await qbApiCallOnce(accessToken, realmId, path);
+  } catch (err) {
+    const isTransient = !err.statusCode || err.statusCode === 429 || err.statusCode >= 500;
+    if (isTransient && attempt < MAX_ATTEMPTS) {
+      const delayMs = 300 * Math.pow(2, attempt - 1); // 300ms, 600ms, ...
+      console.warn(`QB API call to ${path} failed (attempt ${attempt}/${MAX_ATTEMPTS}, status=${err.statusCode || 'network'}), retrying in ${delayMs}ms`);
+      await new Promise(r => setTimeout(r, delayMs));
+      return qbApiCall(accessToken, realmId, path, attempt + 1);
+    }
+    throw err;
+  }
 }
 
 // Step 1: Redirect user to Intuit authorization page
@@ -567,6 +598,18 @@ app.get('/api/qb/callback', async (req, res) => {
   const { code, state, realmId, error } = req.query;
   if (error) return res.redirect('/?qb_error=' + encodeURIComponent(error));
   if (!req.session.userId) return res.redirect('/');
+
+  // CSRF protection: the state value returned by Intuit must match the one
+  // we generated and stored in the session before redirecting to authorize.
+  // Without this check, an attacker could trick a logged-in user's browser
+  // into completing an OAuth callback with the attacker's own authorization
+  // code, effectively connecting the attacker's QuickBooks company to the
+  // victim's Clarity Console account.
+  if (!state || state !== req.session.qbState) {
+    console.error(`QB callback state mismatch for userId=${req.session.userId}`);
+    return res.redirect('/?qb_error=state_mismatch');
+  }
+  delete req.session.qbState; // one-time use
 
   try {
     const credentials = Buffer.from(`${QB_CLIENT_ID}:${QB_CLIENT_SECRET}`).toString('base64');
