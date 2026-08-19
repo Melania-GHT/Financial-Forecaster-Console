@@ -503,8 +503,20 @@ async function getValidQBToken(userId) {
     return { accessToken: tokens.qb_access_token, realmId: tokens.qb_realm_id };
   }
   if (tokens.qb_refresh_token) {
-    const newToken = await refreshQBToken(userId, tokens.qb_refresh_token);
-    return { accessToken: newToken, realmId: tokens.qb_realm_id };
+    try {
+      const newToken = await refreshQBToken(userId, tokens.qb_refresh_token);
+      return { accessToken: newToken, realmId: tokens.qb_realm_id };
+    } catch (err) {
+      // Refresh token itself is expired, revoked, or invalid (e.g. unused for 100+ days).
+      // Clear the stale tokens so the app doesn't keep retrying a dead connection,
+      // and signal the caller that the user needs to reconnect via /api/qb/connect.
+      console.error(`QB refresh token invalid for userId=${userId}:`, err.message);
+      await pool.query(
+        'UPDATE users SET qb_access_token=NULL, qb_refresh_token=NULL, qb_token_expires_at=NULL WHERE id=$1',
+        [userId]
+      ).catch(() => {});
+      return null;
+    }
   }
   return null;
 }
@@ -604,8 +616,15 @@ app.get('/api/qb/status', requireAuth, async (req, res) => {
 // Step 4: Import data from QuickBooks
 app.get('/api/qb/import', requireAuth, async (req, res) => {
   try {
+    const existing = await getQBTokens(req.session.userId);
+    const hadConnection = !!(existing && existing.qb_refresh_token);
     const tokenData = await getValidQBToken(req.session.userId);
-    if (!tokenData) return res.status(401).json({ error: 'QuickBooks not connected. Please connect first.' });
+    if (!tokenData) {
+      const error = hadConnection
+        ? 'Your QuickBooks connection has expired. Please reconnect.'
+        : 'QuickBooks not connected. Please connect first.';
+      return res.status(401).json({ error, needsReconnect: hadConnection });
+    }
 
     const { accessToken, realmId } = tokenData;
 
@@ -623,10 +642,19 @@ app.get('/api/qb/import', requireAuth, async (req, res) => {
       const rows = pnlData.value.Rows.Row || [];
       const findValue = (rows, label) => {
         for (const row of rows) {
+          // Subtotal/group rows (e.g. "Total Income") carry their ColData under Summary
           if (row.Summary && row.Summary.ColData) {
             const lbl = (row.Summary.ColData[0] && row.Summary.ColData[0].value || '').toLowerCase();
             if (lbl.includes(label)) {
               const val = parseFloat((row.Summary.ColData[1] && row.Summary.ColData[1].value) || '0');
+              return isNaN(val) ? 0 : Math.abs(val);
+            }
+          }
+          // Leaf line-item rows (e.g. a single account) carry ColData directly on the row
+          if (row.ColData) {
+            const lbl = (row.ColData[0] && row.ColData[0].value || '').toLowerCase();
+            if (lbl.includes(label)) {
+              const val = parseFloat((row.ColData[1] && row.ColData[1].value) || '0');
               return isNaN(val) ? 0 : Math.abs(val);
             }
           }
@@ -655,6 +683,13 @@ app.get('/api/qb/import', requireAuth, async (req, res) => {
               return isNaN(val) ? 0 : Math.abs(val);
             }
           }
+          if (row.ColData) {
+            const lbl = (row.ColData[0] && row.ColData[0].value || '').toLowerCase();
+            if (lbl.includes(label)) {
+              const val = parseFloat((row.ColData[1] && row.ColData[1].value) || '0');
+              return isNaN(val) ? 0 : Math.abs(val);
+            }
+          }
           if (row.Rows) {
             const found = findValue(row.Rows.Row || [], label);
             if (found) return found;
@@ -662,11 +697,52 @@ app.get('/api/qb/import', requireAuth, async (req, res) => {
         }
         return 0;
       };
-      extracted.bank = findValue(rows, 'checking') || findValue(rows, 'cash and cash');
+      // Sum ALL matching bank/cash-type rows rather than stopping at the first match,
+      // since a company can have multiple accounts (Checking + Savings + Cash on hand)
+      // and the previous version only ever found one of them, or none if the label
+      // didn't exactly match "checking" or "cash and cash".
+      const sumMatching = (rows, labels) => {
+        let total = 0;
+        for (const row of rows) {
+          let lbl = null, val = 0;
+          if (row.ColData) {
+            lbl = (row.ColData[0] && row.ColData[0].value || '').toLowerCase();
+            val = parseFloat((row.ColData[1] && row.ColData[1].value) || '0');
+          }
+          if (lbl && labels.some(l => lbl.includes(l)) && !lbl.includes('total')) {
+            total += isNaN(val) ? 0 : Math.abs(val);
+          }
+          if (row.Rows) total += sumMatching(row.Rows.Row || [], labels);
+        }
+        return total;
+      };
+      const bankLabels = ['checking', 'savings', 'cash on hand', 'cash and cash', 'money market', 'bank account'];
+      extracted.bank = findValue(rows, 'total bank accounts')
+        || findValue(rows, 'total cash and cash')
+        || sumMatching(rows, bankLabels);
       extracted.ar = findValue(rows, 'accounts receivable');
       extracted.ap = findValue(rows, 'accounts payable');
       extracted.totalAssets = findValue(rows, 'total assets');
       extracted.totalLiabilities = findValue(rows, 'total liabilities');
+    }
+
+    // If the report calls themselves failed (auth/network/API error), say so explicitly
+    // rather than returning ok:true with an empty data object.
+    const anyReportFailed = [pnlData, bsData, cfData].some(r => r.status === 'rejected');
+    const gotAnyData = Object.values(extracted).some(v => v && v !== 0);
+
+    if (!gotAnyData) {
+      console.error('QB import: no data extracted.', {
+        pnlStatus: pnlData.status, bsStatus: bsData.status, cfStatus: cfData.status,
+        pnlReason: pnlData.reason && pnlData.reason.message,
+        bsReason: bsData.reason && bsData.reason.message,
+      });
+      return res.status(502).json({
+        ok: false,
+        error: anyReportFailed
+          ? 'QuickBooks reports could not be retrieved. Please try reconnecting.'
+          : 'Connected to QuickBooks, but no financial data was found for this company.',
+      });
     }
 
     res.json({ ok: true, data: extracted });
