@@ -535,20 +535,32 @@ function qbApiCallOnce(accessToken, realmId, path) {
         'Accept': 'application/json',
       }
     }, res => {
+      // Intuit's support team uses this header to look up a specific API call
+      // server-side. We log it on every call (and attach it to errors) so we
+      // have it on hand if we ever need to open a support ticket about a
+      // failed or unexpected response.
+      const intuitTid = res.headers['intuit_tid'] || res.headers['intuit-tid'] || null;
+
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => {
         let parsed;
         try { parsed = JSON.parse(data); }
-        catch(e) { return reject(Object.assign(new Error('Invalid JSON from QuickBooks API'), { statusCode: res.statusCode })); }
+        catch(e) {
+          console.error(`QB API invalid JSON response for ${path}. intuit_tid=${intuitTid}`);
+          return reject(Object.assign(new Error('Invalid JSON from QuickBooks API'), { statusCode: res.statusCode, intuitTid }));
+        }
 
         if (res.statusCode >= 200 && res.statusCode < 300) {
+          console.log(`QB API call OK: ${path} intuit_tid=${intuitTid}`);
           resolve(parsed);
         } else {
           // Surface the real status code so callers can decide whether to retry
           // (5xx/429 are transient) or fail fast (4xx like 401/403 are not).
+          console.error(`QB API error ${res.statusCode} for ${path}. intuit_tid=${intuitTid} body=${data.slice(0, 300)}`);
           const err = new Error(`QuickBooks API returned ${res.statusCode}: ${data.slice(0, 300)}`);
           err.statusCode = res.statusCode;
+          err.intuitTid = intuitTid;
           reject(err);
         }
       });
@@ -773,18 +785,25 @@ app.get('/api/qb/import', requireAuth, async (req, res) => {
     // rather than returning ok:true with an empty data object.
     const anyReportFailed = [pnlData, bsData, cfData].some(r => r.status === 'rejected');
     const gotAnyData = Object.values(extracted).some(v => v && v !== 0);
+    const firstTid = [pnlData, bsData, cfData]
+      .map(r => r.status === 'rejected' && r.reason && r.reason.intuitTid)
+      .find(Boolean) || null;
 
     if (!gotAnyData) {
       console.error('QB import: no data extracted.', {
         pnlStatus: pnlData.status, bsStatus: bsData.status, cfStatus: cfData.status,
         pnlReason: pnlData.reason && pnlData.reason.message,
         bsReason: bsData.reason && bsData.reason.message,
+        intuitTid: firstTid,
       });
       return res.status(502).json({
         ok: false,
         error: anyReportFailed
           ? 'QuickBooks reports could not be retrieved. Please try reconnecting.'
           : 'Connected to QuickBooks, but no financial data was found for this company.',
+        // Included so a user can pass this to support if the problem persists —
+        // it lets Intuit look up exactly what happened on their end.
+        intuitTid: firstTid,
       });
     }
 

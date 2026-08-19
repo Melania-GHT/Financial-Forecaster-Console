@@ -198,9 +198,26 @@
       link.onmouseout = function(){ this.style.color='#9aa9bb'; this.style.borderColor='rgba(255,255,255,0.15)'; };
       sidebar.appendChild(link);
     }
+    // Support contact link in sidebar — lets customers reach us from inside the
+    // app itself, not just via "reply to this email" in trial/subscription emails.
+    function addSupportLink() {
+      var sidebar = document.querySelector('.sidebar');
+      if (!sidebar || document.getElementById('support-link')) return;
+      var link = document.createElement('a');
+      link.id = 'support-link';
+      link.href = 'mailto:info@e-servicesbymel.com?subject=Clarity%20Console%20Support';
+      link.textContent = 'Contact Support';
+      link.style.cssText = 'display:block;margin-top:8px;padding:9px 12px;border:1px solid rgba(255,255,255,0.15);border-radius:9px;color:#9aa9bb;font-size:12px;text-align:center;text-decoration:none;font-family:Inter,sans-serif;';
+      link.onmouseover = function(){ this.style.color='#c9a227'; this.style.borderColor='#c9a227'; };
+      link.onmouseout = function(){ this.style.color='#9aa9bb'; this.style.borderColor='rgba(255,255,255,0.15)'; };
+      sidebar.appendChild(link);
+    }
     addAdminLink();
+    addSupportLink();
     setTimeout(addAdminLink, 1000);
+    setTimeout(addSupportLink, 1000);
     setTimeout(addAdminLink, 2000);
+    setTimeout(addSupportLink, 2000);
 
     // Fix 6: Tracker debounce
     var trackerTimer = null;
