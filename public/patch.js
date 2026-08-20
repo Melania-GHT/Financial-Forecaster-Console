@@ -283,18 +283,15 @@
       btn.onmouseover = function(){ this.style.borderColor='#a8503e'; this.style.background='rgba(168,93,79,0.08)'; };
       btn.onmouseout = function(){ this.style.borderColor='rgba(168,93,79,0.4)'; this.style.background='none'; };
       btn.onclick = function() {
-        if (!confirm('Clear all your data and start fresh for a new month?\n\nThis cannot be undone.')) return;
-        // Clear via API
-        fetch('/api/data', {
-          method: 'PUT',
+        if (!confirm('Start a fresh month?\n\nThis month\'s data will be saved to your history, and your working numbers will reset to a clean slate.')) return;
+        fetch('/api/data/archive-and-reset', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify({ data: {} })
+          credentials: 'include'
         }).then(function() {
-          // Reload the page to reset all fields
           window.location.reload();
         }).catch(function() {
-          window.location.reload();
+          alert('Could not start a fresh month — please try again. Your existing data was not changed.');
         });
       };
       sidebar.appendChild(btn);

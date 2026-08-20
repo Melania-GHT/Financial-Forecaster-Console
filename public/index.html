@@ -874,6 +874,22 @@ function renderBreakeven(c){
 
 // TOOL 6: TRACKER
 const trackerCategories = ['Payroll','Supplies','Subscriptions','Marketing','Rent/Utilities','Travel','Professional Services','Other'];
+let monthlyHistoryCache = null; // cached response from /api/data/history, fetched once per page load
+function fetchMonthlyHistory(){
+  if(monthlyHistoryCache) return Promise.resolve(monthlyHistoryCache);
+  return fetch('/api/data/history', {credentials:'include'})
+    .then(r => r.ok ? r.json() : {months:[]})
+    .then(json => { monthlyHistoryCache = json.months || []; return monthlyHistoryCache; })
+    .catch(() => []);
+}
+function monthLabel(dateStr){
+  const d = new Date(dateStr + 'T00:00:00');
+  return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
+}
+function trackerTotalFromData(toolData){
+  if(!toolData || !toolData.rows) return 0;
+  return toolData.rows.reduce((sum,r) => { const amt = Number(r.amt)||0; return amt>0 ? sum+amt : sum; }, 0);
+}
 function renderTracker(c){
   const d = getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});
   const rows = d.rows;
@@ -905,7 +921,34 @@ function renderTracker(c){
         <p class="story" style="margin-top:16px;">You spent ${fmt(grand)} total. ${sorted[0][0]} was your single biggest category at ${fmt(sorted[0][1])} (${(sorted[0][1]/grand*100).toFixed(0)}%).</p>
       </div>` : ''}
     </div>
+    <div class="card" id="tracker-history-card" style="display:none;">
+      <h3>Month over month</h3>
+      <p class="card-sub">Spending trend across your archived months, plus this month in progress.</p>
+      <div id="tracker-history-section"></div>
+    </div>
   `;
+  loadTrackerHistory(grand);
+}
+function loadTrackerHistory(currentTotal){
+  fetchMonthlyHistory().then(months => {
+    const card = document.getElementById('tracker-history-card');
+    const section = document.getElementById('tracker-history-section');
+    if(!card || !section) return; // user navigated away before this resolved
+    if(!months.length && currentTotal<=0) return; // nothing to show yet
+    card.style.display = '';
+    const bars = months.map(m => ({label: monthLabel(m.snapshot_month), amt: trackerTotalFromData(m.data && m.data.tracker)}));
+    bars.push({label: 'This month (in progress)', amt: currentTotal, current:true});
+    const maxAmt = Math.max(1, ...bars.map(b=>b.amt));
+    section.innerHTML = bars.map(b => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <div style="width:150px;font-size:12px;color:${b.current?'#1f3148':'#4a5568'};font-weight:${b.current?'700':'400'};flex-shrink:0;">${escapeHtml(b.label)}</div>
+        <div style="flex:1;background:#f0ece2;border-radius:4px;overflow:hidden;height:18px;">
+          <div style="width:${b.amt/maxAmt*100}%;background:${b.current?'#c9a227':'#1f3148'};height:100%;"></div>
+        </div>
+        <div style="width:80px;text-align:right;font-size:12px;color:#4a5568;flex-shrink:0;">${fmt(b.amt)}</div>
+      </div>
+    `).join('');
+  });
 }
 function updateTrackerRow(i,field,val){
   const d = getToolData('tracker', {rows:[{name:'',amt:'',cat:'Payroll'}]});

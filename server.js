@@ -97,7 +97,7 @@ function welcomeEmailHtml() {
     + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">You now have full access to The Clarity Console — 8 financial clarity tools that translate your business numbers into plain English.</p>'
     + '<div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">'
     + '<div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Start here:</div>'
-    + '<p style="color:#4a5568;font-size:14px;margin:0 0 8px;"><strong>If you use QuickBooks</strong> - click Import from QuickBooks in the sidebar, export any report as CSV, and upload it.</p>'
+    + '<p style="color:#4a5568;font-size:14px;margin:0 0 8px;"><strong>If you use QuickBooks</strong> - click Import from QuickBooks in the sidebar to securely connect your account in one click. Your numbers sync automatically. (Prefer not to connect an account? You can export a report as CSV and upload it instead.)</p>'
     + '<p style="color:#4a5568;font-size:14px;margin:0;"><strong>If you do not use QuickBooks</strong> - start with Tool 1: Cash Truth Check. Just 5 numbers and you will see where your cash is going.</p>'
     + '</div>'
     + '<a href="' + APP_URL + '" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Go to My Dashboard</a>'
@@ -262,6 +262,59 @@ app.put('/api/data', requireAuth, async (req, res) => {
     );
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: 'Could not save data.' }); }
+});
+
+// "Start Fresh (New Month)": archives the current month's data into monthly_snapshots
+// BEFORE clearing the working data, so month-over-month history (e.g. Money Tracker
+// trends) is preserved instead of being permanently deleted. This replaces the old
+// behavior where the "Start Fresh" button called PUT /api/data with an empty object
+// directly and lost everything with no way to recover it.
+app.post('/api/data/archive-and-reset', requireAuth, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const current = await client.query('SELECT data FROM user_data WHERE user_id=$1', [req.session.userId]);
+    const currentData = current.rows[0] ? current.rows[0].data : {};
+    const hasRealData = currentData && Object.keys(currentData).some(k => currentData[k] && Object.keys(currentData[k]).length > 0);
+
+    if (hasRealData) {
+      await client.query(
+        `INSERT INTO monthly_snapshots (user_id, snapshot_month, data, archived_at)
+         VALUES ($1, date_trunc('month', NOW())::date, $2, NOW())
+         ON CONFLICT (user_id, snapshot_month) DO UPDATE SET data=$2, archived_at=NOW()`,
+        [req.session.userId, JSON.stringify(currentData)]
+      );
+    }
+
+    await client.query(
+      `INSERT INTO user_data (user_id, data, updated_at) VALUES ($1, '{}', NOW())
+       ON CONFLICT (user_id) DO UPDATE SET data='{}', updated_at=NOW()`,
+      [req.session.userId]
+    );
+
+    await client.query('COMMIT');
+    res.json({ ok: true, archived: hasRealData });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Archive-and-reset error:', err);
+    res.status(500).json({ error: 'Could not start a fresh month. Your existing data was not changed.' });
+  } finally {
+    client.release();
+  }
+});
+
+// Returns past months' archived snapshots, oldest first, so the frontend can build
+// real month-over-month trend views (e.g. for Money Tracker) instead of only ever
+// seeing the current, unarchived working data.
+app.get('/api/data/history', requireAuth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT snapshot_month, data, archived_at FROM monthly_snapshots WHERE user_id=$1 ORDER BY snapshot_month ASC',
+      [req.session.userId]
+    );
+    res.json({ months: result.rows });
+  } catch (err) { res.status(500).json({ error: 'Could not load history.' }); }
 });
 
 // ---------- STRIPE ----------
