@@ -883,7 +883,13 @@ function fetchMonthlyHistory(){
     .catch(() => []);
 }
 function monthLabel(dateStr){
-  const d = new Date(dateStr + 'T00:00:00');
+  // The snapshot_month DATE column can be serialized by the pg driver either as a
+  // bare "YYYY-MM-DD" string or as a full ISO datetime "YYYY-MM-DDT00:00:00.000Z"
+  // depending on environment. Normalize to the date portion before parsing, so we
+  // don't end up appending a second time-of-day onto an already-complete string
+  // (which produces "Invalid Date").
+  const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const d = new Date(datePart + 'T00:00:00');
   return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
 }
 function trackerTotalFromData(toolData){
