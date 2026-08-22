@@ -2,6 +2,20 @@
 (function() {
   'use strict';
 
+  // Fix: browsers can restore this page from "bfcache" (back/forward cache)
+  // when the user clicks Back or Forward — showing the exact DOM/JS state
+  // from before, including previously-loaded financial data, WITHOUT
+  // re-running any of this file's on-load checks (like the trial/paywall
+  // check further below). This is what let an expired-trial user "get back
+  // in" by hitting Back: they weren't bypassing access control, they were
+  // looking at a frozen snapshot from before their trial expired. Forcing a
+  // real reload on bfcache restoration re-runs the access check for real.
+  window.addEventListener('pageshow', function(event) {
+    if (event.persisted) {
+      window.location.reload();
+    }
+  });
+
   function getActiveTab() {
     var active = document.querySelector('.nav-item.active');
     if (!active) return null;

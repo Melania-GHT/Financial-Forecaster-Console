@@ -1,4 +1,5 @@
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const bcrypt = require('bcrypt');
 const session = require('express-session');
@@ -57,6 +58,8 @@ async function ensureTablesExist() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS access_expires_at TIMESTAMP`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_hash TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS reset_token_expires_at TIMESTAMP`,
   ];
   for (const col of cols) await pool.query(col).catch(() => {});
   console.log('Database tables verified/created successfully.');
@@ -102,6 +105,22 @@ function welcomeEmailHtml() {
     + '</div>'
     + '<a href="' + APP_URL + '" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Go to My Dashboard</a>'
     + '<p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">Your trial ends in 4 days. Questions? Reply to this email.</p>'
+    + '</div><div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;">'
+    + '2026 E-SERVICES BY MEL | The Clarity Console | All rights reserved.'
+    + '</div></div></body></html>';
+}
+
+function passwordResetEmailHtml(resetUrl) {
+  return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
+    + '<div style="max-width:480px;margin:0 auto;background:#fff;">'
+    + '<div style="background:#1f3148;padding:28px 32px;">'
+    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div>'
+    + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;">E-SERVICES BY MEL</div>'
+    + '</div><div style="padding:32px;">'
+    + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Reset your password</h2>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">We received a request to reset the password for your Clarity Console account. Click below to choose a new one. This link expires in 1 hour.</p>'
+    + '<a href="' + resetUrl + '" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Reset My Password</a>'
+    + '<p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">If you did not request this, you can safely ignore this email — your password will not be changed.</p>'
     + '</div><div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;">'
     + '2026 E-SERVICES BY MEL | The Clarity Console | All rights reserved.'
     + '</div></div></body></html>';
@@ -170,6 +189,29 @@ app.use(session({
 function requireAuth(req, res, next) { if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' }); next(); }
 function requireAdmin(req, res, next) { if (!req.session.isAdmin) return res.status(401).json({ error: 'Admin access required' }); next(); }
 
+// Enforces trial/subscription status server-side, not just via the frontend's
+// on-page-load redirect to paywall.html. That redirect only runs once when a
+// page loads, so a user whose trial expires mid-session (or who calls the API
+// directly, bypassing the UI) would otherwise keep full access indefinitely —
+// which is the bug that let beta testers retain access past their trial.
+async function requireActiveAccess(req, res, next) {
+  if (!req.session.userId) return res.status(401).json({ error: 'Not logged in' });
+  try {
+    const result = await pool.query(
+      'SELECT subscription_status, subscription_plan, trial_ends_at, access_expires_at FROM users WHERE id=$1',
+      [req.session.userId]
+    );
+    const user = result.rows[0];
+    if (!user || !hasAccess(user)) {
+      return res.status(402).json({ error: 'Your trial or subscription has expired. Please upgrade to continue.', needsUpgrade: true });
+    }
+    next();
+  } catch (err) {
+    console.error('Access check error:', err);
+    res.status(500).json({ error: 'Could not verify access.' });
+  }
+}
+
 // ---------- AUTH ----------
 
 app.post('/api/signup', async (req, res) => {
@@ -226,6 +268,74 @@ app.post('/api/login', async (req, res) => {
 
 app.post('/api/logout', (req, res) => { req.session.destroy(() => res.json({ ok: true })); });
 
+// Request a password reset. Always responds with the same generic success
+// message whether or not the email exists in our system — this prevents an
+// attacker (or anyone) from using this endpoint to check which email
+// addresses have an account here (a common enumeration vulnerability).
+app.post('/api/auth/forgot-password', async (req, res) => {
+  const GENERIC_RESPONSE = { ok: true, message: "If that email has an account, we've sent a password reset link." };
+  try {
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    const normalizedEmail = String(email).trim().toLowerCase();
+
+    const result = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
+    if (!result.rows.length) return res.json(GENERIC_RESPONSE); // don't reveal whether the account exists
+
+    // The raw token goes in the emailed link; only its hash is stored, the
+    // same principle as never storing plaintext passwords. A leaked database
+    // alone can't be used to reset anyone's password without the original
+    // token, which only ever existed in the email we sent.
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+    await pool.query(
+      'UPDATE users SET reset_token_hash=$1, reset_token_expires_at=$2 WHERE id=$3',
+      [tokenHash, expiresAt, result.rows[0].id]
+    );
+
+    const resetUrl = `${APP_URL}/reset-password.html?token=${rawToken}`;
+    await sendEmail(normalizedEmail, 'Reset your Clarity Console password', passwordResetEmailHtml(resetUrl));
+
+    res.json(GENERIC_RESPONSE);
+  } catch (err) {
+    console.error('Forgot-password error:', err);
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+});
+
+app.post('/api/auth/reset-password', async (req, res) => {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) return res.status(400).json({ error: 'Token and new password are required.' });
+    if (newPassword.length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters.' });
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const result = await pool.query(
+      'SELECT id FROM users WHERE reset_token_hash=$1 AND reset_token_expires_at > NOW()',
+      [tokenHash]
+    );
+    if (!result.rows.length) {
+      return res.status(400).json({ error: 'This reset link is invalid or has expired. Please request a new one.' });
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    // Clear the token on use so it can't be replayed (single-use, like the
+    // reset link itself implies), whether or not this request originated
+    // from the person who requested it.
+    await pool.query(
+      'UPDATE users SET password_hash=$1, reset_token_hash=NULL, reset_token_expires_at=NULL WHERE id=$2',
+      [passwordHash, result.rows[0].id]
+    );
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Reset-password error:', err);
+    res.status(500).json({ error: 'Something went wrong. Please try again.' });
+  }
+});
+
 app.get('/api/me', async (req, res) => {
   if (!req.session.userId) return res.json({ loggedIn: false });
   try {
@@ -238,14 +348,14 @@ app.get('/api/me', async (req, res) => {
 
 // ---------- DATA ----------
 
-app.get('/api/data', requireAuth, async (req, res) => {
+app.get('/api/data', requireActiveAccess, async (req, res) => {
   try {
     const result = await pool.query('SELECT data FROM user_data WHERE user_id=$1', [req.session.userId]);
     res.json({ data: result.rows[0] ? result.rows[0].data : {} });
   } catch (err) { res.status(500).json({ error: 'Could not load data.' }); }
 });
 
-app.put('/api/data', requireAuth, async (req, res) => {
+app.put('/api/data', requireActiveAccess, async (req, res) => {
   try {
     const { data } = req.body;
     if (typeof data !== 'object' || data === null) return res.status(400).json({ error: 'Invalid data.' });
@@ -269,7 +379,7 @@ app.put('/api/data', requireAuth, async (req, res) => {
 // trends) is preserved instead of being permanently deleted. This replaces the old
 // behavior where the "Start Fresh" button called PUT /api/data with an empty object
 // directly and lost everything with no way to recover it.
-app.post('/api/data/archive-and-reset', requireAuth, async (req, res) => {
+app.post('/api/data/archive-and-reset', requireActiveAccess, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -307,7 +417,7 @@ app.post('/api/data/archive-and-reset', requireAuth, async (req, res) => {
 // Returns past months' archived snapshots, oldest first, so the frontend can build
 // real month-over-month trend views (e.g. for Money Tracker) instead of only ever
 // seeing the current, unarchived working data.
-app.get('/api/data/history', requireAuth, async (req, res) => {
+app.get('/api/data/history', requireActiveAccess, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT snapshot_month, data, archived_at FROM monthly_snapshots WHERE user_id=$1 ORDER BY snapshot_month ASC',
@@ -644,7 +754,7 @@ async function qbApiCall(accessToken, realmId, path, attempt = 1) {
 }
 
 // Step 1: Redirect user to Intuit authorization page
-app.get('/api/qb/connect', requireAuth, (req, res) => {
+app.get('/api/qb/connect', requireActiveAccess, (req, res) => {
   if (!QB_CLIENT_ID) return res.status(503).json({ error: 'QuickBooks not configured' });
   const state = req.session.userId + '_' + Date.now();
   req.session.qbState = state;
@@ -713,7 +823,7 @@ app.get('/api/qb/callback', async (req, res) => {
 });
 
 // Step 3: Get QB connection status
-app.get('/api/qb/status', requireAuth, async (req, res) => {
+app.get('/api/qb/status', requireActiveAccess, async (req, res) => {
   const tokens = await getQBTokens(req.session.userId);
   res.json({
     connected: !!(tokens && tokens.qb_access_token && tokens.qb_realm_id),
@@ -722,7 +832,7 @@ app.get('/api/qb/status', requireAuth, async (req, res) => {
 });
 
 // Step 4: Import data from QuickBooks
-app.get('/api/qb/import', requireAuth, async (req, res) => {
+app.get('/api/qb/import', requireActiveAccess, async (req, res) => {
   try {
     const existing = await getQBTokens(req.session.userId);
     const hadConnection = !!(existing && existing.qb_refresh_token);
@@ -868,7 +978,7 @@ app.get('/api/qb/import', requireAuth, async (req, res) => {
 });
 
 // Step 5: Disconnect QuickBooks
-app.post('/api/qb/disconnect', requireAuth, async (req, res) => {
+app.post('/api/qb/disconnect', requireActiveAccess, async (req, res) => {
   try {
     await pool.query(
       'UPDATE users SET qb_access_token=NULL, qb_refresh_token=NULL, qb_realm_id=NULL, qb_token_expires_at=NULL WHERE id=$1',

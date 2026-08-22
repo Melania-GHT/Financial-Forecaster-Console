@@ -255,6 +255,7 @@
       <div class="err hidden" id="auth-error"></div>
       <button type="submit" class="login-btn" id="auth-submit">Log In</button>
     </form>
+    <p class="footnote" id="auth-forgot-wrap"><a href="#" id="auth-forgot-link" onclick="handleForgotPassword(event)" style="color:#9a9080;">Forgot password?</a></p>
     <p class="footnote" id="auth-footnote">Don't have an account yet? Click "Create Account" above.</p>
   </div>
 </div>
@@ -334,7 +335,16 @@ function fmt(n){
 
 // Wrapper that always sends session cookies — required for auth to work correctly
 function apiFetch(url, opts){
-  return fetch(url, Object.assign({ credentials: 'include' }, opts));
+  return fetch(url, Object.assign({ credentials: 'include' }, opts)).then(res => {
+    // Server-side access enforcement (trial/subscription expired) returns 402.
+    // Redirect to the paywall immediately rather than letting callers handle
+    // a raw error — this is what actually stops an expired user from
+    // continuing to use the app mid-session, not just on next page load.
+    if (res.status === 402 && !window.location.pathname.includes('paywall')) {
+      window.location.href = '/paywall.html';
+    }
+    return res;
+  });
 }
 
 // ---------- AUTH ----------
@@ -347,7 +357,30 @@ function setAuthMode(mode){
   document.getElementById('auth-footnote').textContent = mode==='login'
     ? "Don't have an account yet? Click \"Create Account\" above."
     : 'Already have an account? Click "Log In" above.';
+  document.getElementById('auth-forgot-wrap').style.display = mode==='login' ? '' : 'none';
   document.getElementById('auth-error').classList.add('hidden');
+}
+
+async function handleForgotPassword(e){
+  e.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) { alert('Enter your email address above first, then click "Forgot password?"'); return; }
+  const link = document.getElementById('auth-forgot-link');
+  const originalText = link.textContent;
+  link.textContent = 'Sending...';
+  try {
+    const res = await apiFetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json();
+    alert(data.message || "If that email has an account, we've sent a password reset link.");
+  } catch (err) {
+    alert('Something went wrong. Please try again.');
+  } finally {
+    link.textContent = originalText;
+  }
 }
 
 document.getElementById('auth-form').addEventListener('submit', async (e)=>{
