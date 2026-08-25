@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Clarity Console — Admin</title>
+<title>Clarity Console by Mel — Admin</title>
 <style>
   *{box-sizing:border-box;}
   body{margin:0;padding:0;font-family:'Inter',system-ui,sans-serif;background:#0f1419;color:#e8e4db;}
@@ -54,7 +54,7 @@
 <div id="login-screen" class="login-wrap">
   <div class="login-card">
     <h1>Admin Panel</h1>
-    <p>Clarity Console — admin access only</p>
+    <p>Clarity Console by Mel — admin access only</p>
     <div>
       <label>Username</label>
       <input type="text" id="admin-user" autocomplete="off">
@@ -69,7 +69,7 @@
 <!-- DASHBOARD -->
 <div id="dashboard" class="dashboard hidden">
   <div class="header">
-    <h1>⚡ Clarity Console — Admin</h1>
+    <h1>⚡ Clarity Console by Mel — Admin</h1>
     <div>
       <a href="/" style="color:#9baab8;font-size:12px;text-decoration:none;margin-right:16px;">← Back to App</a>
       <span id="last-updated" style="color:#9baab8;font-size:12px;"></span>
@@ -213,7 +213,8 @@ function renderTable(users) {
       <td><div class="tools">${toolTags}</div></td>
       <td>
         <button onclick="grantAccess(${u.id},'${escHtml(u.email)}')" style="background:#6b8f71;color:#fff;border:none;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;margin-bottom:4px;display:block;width:100%;">Grant Access</button>
-        <button onclick="extendTrial(${u.id},'${escHtml(u.email)}')" style="background:rgba(201,162,39,0.2);color:#c9a227;border:1px solid #c9a227;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;display:block;width:100%;">+7 Days Trial</button>
+        <button onclick="extendTrial(${u.id},'${escHtml(u.email)}')" style="background:rgba(201,162,39,0.2);color:#c9a227;border:1px solid #c9a227;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;display:block;width:100%;margin-bottom:4px;">+7 Days Trial</button>
+        <button onclick="setAccessWindow(${u.id},'${escHtml(u.email)}')" style="background:rgba(31,49,72,0.08);color:#1f3148;border:1px solid #1f3148;padding:5px 10px;border-radius:5px;font-size:11px;cursor:pointer;display:block;width:100%;">Set Exact Access...</button>
       </td>
     </tr>`;
   }).join('');
@@ -266,6 +267,31 @@ async function extendTrial(userId, email) {
       loadUsers();
     } else {
       alert('Error: ' + (data.error || 'Could not extend trial'));
+    }
+  } catch(e) {
+    alert('Error connecting to server');
+  }
+}
+
+async function setAccessWindow(userId, email) {
+  const input = prompt(`Give ${email} EXACTLY how many days of access, starting now?\n\nThis replaces any current status (including lifetime/active) with a normal trial that expires after this many days.`, '7');
+  if (input === null) return; // cancelled
+  const days = parseInt(input, 10);
+  if (!days || days < 1) { alert('Please enter a positive number of days.'); return; }
+  if (!confirm(`Set ${email}'s access to expire in exactly ${days} day(s) from now? This will remove any lifetime/active status they currently have.`)) return;
+  try {
+    const res = await fetch('/api/admin/set-access-window', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ userId, days })
+    });
+    const data = await res.json();
+    if (data.ok) {
+      alert(`✅ ${email}'s access now expires in ${days} day(s).`);
+      loadUsers();
+    } else {
+      alert('Error: ' + (data.error || 'Could not set access window'));
     }
   } catch(e) {
     alert('Error connecting to server');

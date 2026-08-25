@@ -93,11 +93,11 @@ function welcomeEmailHtml() {
   return '<html><body style="margin:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
     + '<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;">'
     + '<div style="background:#1f3148;padding:28px 32px;">'
-    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div>'
+    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">Clarity Console by Mel</div>'
     + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;">E-SERVICES BY MEL</div>'
     + '</div><div style="padding:32px;">'
     + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Welcome! Your 4-day free trial starts now.</h2>'
-    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">You now have full access to The Clarity Console — 8 financial clarity tools that translate your business numbers into plain English.</p>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 20px;">You now have full access to Clarity Console by Mel — 8 financial clarity tools that translate your business numbers into plain English.</p>'
     + '<div style="background:#f7f4ee;border-radius:10px;padding:20px;margin-bottom:24px;">'
     + '<div style="font-weight:700;color:#1f3148;font-size:14px;margin-bottom:12px;">Start here:</div>'
     + '<p style="color:#4a5568;font-size:14px;margin:0 0 8px;"><strong>If you use QuickBooks</strong> - click Import from QuickBooks in the sidebar to securely connect your account in one click. Your numbers sync automatically. (Prefer not to connect an account? You can export a report as CSV and upload it instead.)</p>'
@@ -106,7 +106,7 @@ function welcomeEmailHtml() {
     + '<a href="' + APP_URL + '" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Go to My Dashboard</a>'
     + '<p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">Your trial ends in 4 days. Questions? Reply to this email.</p>'
     + '</div><div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;">'
-    + '2026 E-SERVICES BY MEL | The Clarity Console | All rights reserved.'
+    + '2026 E-SERVICES BY MEL | Clarity Console by Mel | All rights reserved.'
     + '</div></div></body></html>';
 }
 
@@ -114,15 +114,15 @@ function passwordResetEmailHtml(resetUrl) {
   return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
     + '<div style="max-width:480px;margin:0 auto;background:#fff;">'
     + '<div style="background:#1f3148;padding:28px 32px;">'
-    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div>'
+    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">Clarity Console by Mel</div>'
     + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;">E-SERVICES BY MEL</div>'
     + '</div><div style="padding:32px;">'
     + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Reset your password</h2>'
-    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">We received a request to reset the password for your Clarity Console account. Click below to choose a new one. This link expires in 1 hour.</p>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">We received a request to reset the password for your Clarity Console by Mel account. Click below to choose a new one. This link expires in 1 hour.</p>'
     + '<a href="' + resetUrl + '" style="display:block;background:#1f3148;color:#fff;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Reset My Password</a>'
     + '<p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">If you did not request this, you can safely ignore this email — your password will not be changed.</p>'
     + '</div><div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;">'
-    + '2026 E-SERVICES BY MEL | The Clarity Console | All rights reserved.'
+    + '2026 E-SERVICES BY MEL | Clarity Console by Mel | All rights reserved.'
     + '</div></div></body></html>';
 }
 
@@ -132,7 +132,7 @@ function trialReminderHtml(daysLeft) {
   const when = urgent ? 'TODAY' : 'TOMORROW';
   return '<html><body style="margin:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
     + '<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;">'
-    + '<div style="background:#1f3148;padding:28px 32px;"><div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div></div>'
+    + '<div style="background:#1f3148;padding:28px 32px;"><div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">Clarity Console by Mel</div></div>'
     + '<div style="padding:32px;">'
     + '<div style="background:' + color + ';color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">Your free trial expires ' + when + '</div>'
     + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Do not lose your financial clarity.</h2>'
@@ -145,7 +145,7 @@ function trialReminderHtml(daysLeft) {
 function subscriptionReminderHtml(plan, daysLeft) {
   return '<html><body style="margin:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
     + '<div style="max-width:560px;margin:40px auto;background:#fff;border-radius:16px;overflow:hidden;">'
-    + '<div style="background:#1f3148;padding:28px 32px;"><div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">The Clarity Console</div></div>'
+    + '<div style="background:#1f3148;padding:28px 32px;"><div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">Clarity Console by Mel</div></div>'
     + '<div style="padding:32px;">'
     + '<div style="background:#c8862b;color:#fff;padding:12px 16px;border-radius:8px;font-weight:700;font-size:14px;margin-bottom:24px;">Your ' + plan + ' subscription expires in ' + daysLeft + ' days</div>'
     + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:22px;margin:0 0 12px;">Time to renew your access.</h2>'
@@ -158,13 +158,13 @@ async function sendExpiryReminders() {
   console.log('Running daily expiry reminder check...');
   try {
     const t1 = await pool.query(`SELECT id,email FROM users WHERE subscription_status='trial' AND trial_ends_at BETWEEN NOW() AND NOW() + INTERVAL '25 hours' AND trial_ends_at > NOW()`);
-    for (const u of t1.rows) await sendEmail(u.email, 'Your Clarity Console trial expires today', trialReminderHtml(1));
+    for (const u of t1.rows) await sendEmail(u.email, 'Your Clarity Console by Mel trial expires today', trialReminderHtml(1));
 
     const t2 = await pool.query(`SELECT id,email FROM users WHERE subscription_status='trial' AND trial_ends_at BETWEEN NOW() + INTERVAL '25 hours' AND NOW() + INTERVAL '49 hours'`);
-    for (const u of t2.rows) await sendEmail(u.email, 'Your Clarity Console trial expires tomorrow', trialReminderHtml(2));
+    for (const u of t2.rows) await sendEmail(u.email, 'Your Clarity Console by Mel trial expires tomorrow', trialReminderHtml(2));
 
     const p3 = await pool.query(`SELECT id,email,subscription_plan FROM users WHERE subscription_status='active' AND access_expires_at BETWEEN NOW() + INTERVAL '2 days' AND NOW() + INTERVAL '4 days'`);
-    for (const u of p3.rows) await sendEmail(u.email, 'Your Clarity Console subscription expires in 3 days', subscriptionReminderHtml(u.subscription_plan, 3));
+    for (const u of p3.rows) await sendEmail(u.email, 'Your Clarity Console by Mel subscription expires in 3 days', subscriptionReminderHtml(u.subscription_plan, 3));
 
     console.log('Reminders sent:', t1.rows.length + t2.rows.length + p3.rows.length, 'emails');
   } catch (err) { console.error('Expiry reminder error:', err); }
@@ -233,7 +233,7 @@ app.post('/api/signup', async (req, res) => {
     req.session.email = normalizedEmail;
     // Send welcome email immediately (non-blocking)
     console.log('Sending welcome email to:', normalizedEmail);
-    sendEmail(normalizedEmail, 'Welcome to The Clarity Console - your 4-day trial starts now!', welcomeEmailHtml());
+    sendEmail(normalizedEmail, 'Welcome to Clarity Console by Mel - your 4-day trial starts now!', welcomeEmailHtml());
     req.session.save((err) => {
       if (err) return res.status(500).json({ error: 'Account created but session failed. Please log in.' });
       res.json({ ok: true, email: normalizedEmail, trialDays: TRIAL_DAYS });
@@ -296,7 +296,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     );
 
     const resetUrl = `${APP_URL}/reset-password.html?token=${rawToken}`;
-    await sendEmail(normalizedEmail, 'Reset your Clarity Console password', passwordResetEmailHtml(resetUrl));
+    await sendEmail(normalizedEmail, 'Reset your Clarity Console by Mel password', passwordResetEmailHtml(resetUrl));
 
     res.json(GENERIC_RESPONSE);
   } catch (err) {
@@ -561,10 +561,29 @@ app.post('/api/admin/extend-trial', requireAdmin, async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Could not extend trial.' }); }
 });
 
+// Sets an EXACT access window starting now (unlike extend-trial, which adds
+// on top of whatever expiry already exists). Also resets subscription_status
+// back to 'trial', so this can correct a user who was previously given
+// 'lifetime'/'active' status via Grant Access — useful for beta testers who
+// were granted permanent access early on but should now be on normal rules,
+// or for giving a specific contact (e.g. a friend evaluating the product) a
+// precise, known window like exactly 7 days, rather than an approximate one.
+app.post('/api/admin/set-access-window', requireAdmin, async (req, res) => {
+  const { userId, days } = req.body;
+  if (!userId || !days || days < 1) return res.status(400).json({ error: 'userId and a positive number of days are required.' });
+  try {
+    await pool.query(
+      "UPDATE users SET subscription_status='trial', subscription_plan=NULL, trial_ends_at = NOW() + ($1 || ' days')::interval, access_expires_at=NULL WHERE id=$2",
+      [days, userId]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: 'Could not set access window.' }); }
+});
+
 app.get('/api/admin/test-email', requireAdmin, async (req, res) => {
   const testTo = req.query.to || 'info@e-servicesbymel.com';
   try {
-    const result = await resend.emails.send({ from: `E-SERVICES BY MEL <${FROM_EMAIL}>`, to: testTo, subject: 'Test email from Clarity Console', html: '<p>Email sending is working correctly!</p>' });
+    const result = await resend.emails.send({ from: `E-SERVICES BY MEL <${FROM_EMAIL}>`, to: testTo, subject: 'Test email from Clarity Console by Mel', html: '<p>Email sending is working correctly!</p>' });
     console.log('Test email result:', JSON.stringify(result));
     res.json({ ok: true, result });
   } catch (err) { console.error('Test email error:', err); res.status(500).json({ error: err.message }); }
@@ -779,7 +798,7 @@ app.get('/api/qb/callback', async (req, res) => {
   // Without this check, an attacker could trick a logged-in user's browser
   // into completing an OAuth callback with the attacker's own authorization
   // code, effectively connecting the attacker's QuickBooks company to the
-  // victim's Clarity Console account.
+  // victim's Clarity Console by Mel account.
   if (!state || state !== req.session.qbState) {
     console.error(`QB callback state mismatch for userId=${req.session.userId}`);
     return res.redirect('/?qb_error=state_mismatch');
@@ -993,6 +1012,6 @@ app.post('/api/qb/disconnect', requireActiveAccess, async (req, res) => {
 app.get('/*splat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
 
 app.listen(PORT, async () => {
-  console.log('Clarity Console running on port', PORT);
+  console.log('Clarity Console by Mel running on port', PORT);
   try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
 });

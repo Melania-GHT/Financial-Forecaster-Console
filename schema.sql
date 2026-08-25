@@ -1,4 +1,4 @@
--- Clarity Console database schema
+-- Clarity Console by Mel database schema
 -- Run this once in Render's PostgreSQL dashboard (or via psql) before first deploy.
 
 CREATE TABLE IF NOT EXISTS users (

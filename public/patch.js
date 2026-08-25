@@ -1,4 +1,4 @@
-// patch.js — fixes for Clarity Console
+// patch.js — fixes for Clarity Console by Mel
 (function() {
   'use strict';
 
@@ -322,7 +322,7 @@
       var footer = document.createElement('div');
       footer.id = 'eservices-trademark';
       footer.style.cssText = 'margin-top:48px;padding-top:20px;border-top:1px solid var(--line);text-align:center;color:#b5a99a;font-size:11.5px;font-family:Inter,sans-serif;letter-spacing:0.06em;';
-      footer.innerHTML = '&copy; ' + new Date().getFullYear() + ' <strong style="letter-spacing:0.08em;">E-SERVICES BY MEL</strong> &trade; &nbsp;|&nbsp; The Clarity Console &trade; &nbsp;|&nbsp; All rights reserved.';
+      footer.innerHTML = '&copy; ' + new Date().getFullYear() + ' <strong style="letter-spacing:0.08em;">E-SERVICES BY MEL</strong> &trade; &nbsp;|&nbsp; Clarity Console by Mel &trade; &nbsp;|&nbsp; All rights reserved.';
       main.appendChild(footer);
     }
 
