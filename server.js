@@ -126,6 +126,28 @@ function passwordResetEmailHtml(resetUrl) {
     + '</div></div></body></html>';
 }
 
+function accountSetupEmailHtml(setupUrl) {
+  // Sent immediately when a Gumroad purchase creates a brand-new account.
+  // The account is created with a random, unknown password (the buyer never
+  // chose one at checkout), so this link is how they actually get in — not
+  // an optional convenience. This link is valid for 7 days rather than the
+  // password-reset flow's 1 hour, since a buyer may not check email right
+  // after purchasing.
+  return '<!DOCTYPE html><html><body style="margin:0;padding:0;background:#f7f4ee;font-family:Arial,sans-serif;">'
+    + '<div style="max-width:480px;margin:0 auto;background:#fff;">'
+    + '<div style="background:#1f3148;padding:28px 32px;">'
+    + '<div style="font-family:Georgia,serif;font-size:22px;color:#fff;font-weight:700;">Clarity Console by Mel</div>'
+    + '<div style="font-size:12px;color:rgba(255,255,255,0.5);margin-top:4px;">E-SERVICES BY MEL</div>'
+    + '</div><div style="padding:32px;">'
+    + '<h2 style="font-family:Georgia,serif;color:#1f3148;font-size:24px;margin:0 0 12px;">Your purchase is confirmed!</h2>'
+    + '<p style="color:#4a5568;font-size:15px;line-height:1.6;margin:0 0 24px;">Thanks for getting Clarity Console by Mel. Your access is ready right now — click below to set your password and get straight into your dashboard.</p>'
+    + '<a href="' + setupUrl + '" style="display:block;background:#c9a227;color:#1f3148;text-align:center;padding:15px;border-radius:10px;font-weight:700;font-size:15px;text-decoration:none;margin-bottom:20px;">Set My Password &amp; Log In</a>'
+    + '<p style="color:#9a9080;font-size:12px;text-align:center;margin:0;">This link is valid for 7 days. Need help? Just reply to this email.</p>'
+    + '</div><div style="background:#f7f4ee;padding:16px 32px;text-align:center;font-size:11px;color:#b5a99a;">'
+    + '2026 E-SERVICES BY MEL | Clarity Console by Mel | All rights reserved.'
+    + '</div></div></body></html>';
+}
+
 function trialReminderHtml(daysLeft) {
   const urgent = daysLeft <= 1;
   const color = urgent ? '#a8503e' : '#c8862b';
@@ -272,6 +294,22 @@ app.post('/api/logout', (req, res) => { req.session.destroy(() => res.json({ ok:
 // message whether or not the email exists in our system — this prevents an
 // attacker (or anyone) from using this endpoint to check which email
 // addresses have an account here (a common enumeration vulnerability).
+// Generates a secure, single-use token for either "reset my password" or
+// "set up my new account" — same underlying mechanism (a hashed token with
+// an expiry), just used at two different moments. Centralizing this means
+// both flows share one, carefully-reviewed implementation instead of two
+// slightly different copies that could drift out of sync.
+async function createAccountSetupToken(userId, expiresInMs) {
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+  const expiresAt = new Date(Date.now() + expiresInMs);
+  await pool.query(
+    'UPDATE users SET reset_token_hash=$1, reset_token_expires_at=$2 WHERE id=$3',
+    [tokenHash, expiresAt, userId]
+  );
+  return `${APP_URL}/reset-password.html?token=${rawToken}`;
+}
+
 app.post('/api/auth/forgot-password', async (req, res) => {
   const GENERIC_RESPONSE = { ok: true, message: "If that email has an account, we've sent a password reset link." };
   try {
@@ -282,20 +320,7 @@ app.post('/api/auth/forgot-password', async (req, res) => {
     const result = await pool.query('SELECT id FROM users WHERE email = $1', [normalizedEmail]);
     if (!result.rows.length) return res.json(GENERIC_RESPONSE); // don't reveal whether the account exists
 
-    // The raw token goes in the emailed link; only its hash is stored, the
-    // same principle as never storing plaintext passwords. A leaked database
-    // alone can't be used to reset anyone's password without the original
-    // token, which only ever existed in the email we sent.
-    const rawToken = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-    await pool.query(
-      'UPDATE users SET reset_token_hash=$1, reset_token_expires_at=$2 WHERE id=$3',
-      [tokenHash, expiresAt, result.rows[0].id]
-    );
-
-    const resetUrl = `${APP_URL}/reset-password.html?token=${rawToken}`;
+    const resetUrl = await createAccountSetupToken(result.rows[0].id, 60 * 60 * 1000); // 1 hour
     await sendEmail(normalizedEmail, 'Reset your Clarity Console by Mel password', passwordResetEmailHtml(resetUrl));
 
     res.json(GENERIC_RESPONSE);
@@ -501,7 +526,26 @@ app.post('/api/stripe/webhook', async (req, res) => {
 
 // ---------- GUMROAD WEBHOOK ----------
 
-app.post('/api/gumroad/webhook', async (req, res) => {
+// SECURITY: Gumroad's basic "Ping" webhook does not cryptographically sign
+// its requests (no HMAC/signature header to verify), unlike Stripe's
+// webhooks above. Without some form of verification, anyone who discovered
+// this URL could POST a fake sale notification with any email and grant
+// themselves free access, completely bypassing payment. The fix is a
+// shared secret embedded directly in the URL path itself — only someone
+// who knows GUMROAD_WEBHOOK_SECRET (i.e., the URL registered in Gumroad's
+// own dashboard) can reach this handler at all.
+app.post('/api/gumroad/webhook/:secret', async (req, res) => {
+  const expected = process.env.GUMROAD_WEBHOOK_SECRET || '';
+  const provided = req.params.secret || '';
+  const expectedBuf = Buffer.from(expected);
+  const providedBuf = Buffer.from(provided);
+  const isValid = expected
+    && expectedBuf.length === providedBuf.length
+    && crypto.timingSafeEqual(expectedBuf, providedBuf);
+  if (!isValid) {
+    console.error('Gumroad webhook: rejected request with invalid/missing secret');
+    return res.status(403).json({ error: 'Forbidden' });
+  }
   try {
     const { email, product_name, sale_id } = req.body;
     if (!email) return res.status(400).json({ error: 'No email provided' });
@@ -512,7 +556,8 @@ app.post('/api/gumroad/webhook', async (req, res) => {
     else if (name.includes('lifetime')) plan = 'lifetime';
     else if (name.includes('annual') || name.includes('yearly')) plan = 'annual';
     let userResult = await pool.query('SELECT id FROM users WHERE email=$1', [normalizedEmail]);
-    if (userResult.rows.length === 0) {
+    const isNewUser = userResult.rows.length === 0;
+    if (isNewUser) {
       const tempPassword = await bcrypt.hash(sale_id || Math.random().toString(36), 12);
       const result = await pool.query(
         "INSERT INTO users (email,password_hash,created_at,subscription_status,subscription_plan) VALUES ($1,$2,NOW(),'pending',$3) RETURNING id",
@@ -522,6 +567,22 @@ app.post('/api/gumroad/webhook', async (req, res) => {
       userResult = { rows: [{ id: result.rows[0].id }] };
     }
     await grantSubscriptionAccess(userResult.rows[0].id, plan);
+
+    // The account (new or existing) now has database-level access, but a
+    // brand-new account was just given a random password nobody knows —
+    // without this, the buyer would have no actual way to log in. Send the
+    // real access link now, synchronously, so a failure here shows up in
+    // this request's logs immediately rather than silently leaving someone
+    // unable to reach their purchase.
+    if (isNewUser) {
+      try {
+        const setupUrl = await createAccountSetupToken(userResult.rows[0].id, 7 * 24 * 60 * 60 * 1000); // 7 days
+        await sendEmail(normalizedEmail, 'Your Clarity Console by Mel access is ready', accountSetupEmailHtml(setupUrl));
+      } catch (emailErr) {
+        console.error('Gumroad webhook: access granted but welcome email failed for', normalizedEmail, emailErr);
+      }
+    }
+
     console.log('Gumroad: Access granted to', normalizedEmail, 'plan:', plan);
     res.json({ ok: true });
   } catch (err) { console.error('Gumroad webhook error:', err); res.status(500).json({ error: 'Webhook processing failed' }); }
