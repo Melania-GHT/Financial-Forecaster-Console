@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clarity Console by Mel™ — Know Your Numbers</title>
+<meta name="description" content="A private financial dashboard that translates your business numbers into plain English.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'media',
+    theme: {
+      extend: {
+        colors: {
+          navy: '#1f3148',
+          cream: '#f7f4ee',
+          gold: '#c9a227',
+          sage: '#5c7a5e',
+          slate: '#4a5568',
+          rule: '#e3ddd0',
+        },
+        fontFamily: {
+          serif: ['Fraunces', 'Georgia', 'serif'],
+          sans: ['Inter', 'sans-serif'],
+          mono: ['IBM Plex Mono', 'monospace'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+  }
+  .translate-fade { transition: opacity 0.6s ease, transform 0.6s ease; }
+  .translate-out { opacity: 0; transform: translateY(-6px); }
+  .translate-in { opacity: 1; transform: translateY(0); }
+  :focus-visible { outline: 2px solid #c9a227; outline-offset: 2px; }
+</style>
+</head>
+<body class="bg-cream dark:bg-navy text-navy dark:text-cream font-sans antialiased">
+
+<header class="border-b border-rule dark:border-white/10">
+  <div class="max-w-5xl mx-auto px-6 py-5 flex items-center justify-between">
+    <div class="font-serif font-semibold text-lg tracking-tight" data-gumroad-field="name">Clarity Console by Mel</div>
+    <a href="#pricing" class="text-sm font-medium px-4 py-2 rounded-full border border-navy dark:border-cream hover:bg-navy hover:text-cream dark:hover:bg-cream dark:hover:text-navy transition-colors">See pricing</a>
+  </div>
+</header>
+
+<main>
+
+  <section class="max-w-3xl mx-auto px-6 pt-20 pb-16 text-center">
+    <p class="text-xs font-semibold tracking-[0.2em] text-gold uppercase mb-6">Know your numbers</p>
+    <h1 class="font-serif text-4xl sm:text-5xl font-medium leading-tight mb-8">
+      Your financial reports,<br class="hidden sm:block"> finally in plain English.
+    </h1>
+
+    <div class="mx-auto max-w-lg h-24 flex items-center justify-center mb-8" aria-live="polite">
+      <div id="translate-demo" class="translate-fade translate-in">
+        <p id="translate-before" class="font-mono text-sm text-slate dark:text-cream/60 mb-2">Accounts receivable aging: 47.2 days</p>
+        <p id="translate-after" class="font-serif text-xl sm:text-2xl">You're waiting an extra 2 weeks to get paid.</p>
+      </div>
+    </div>
+
+    <p class="text-slate dark:text-cream/70 text-base sm:text-lg leading-relaxed mb-10 max-w-xl mx-auto" data-gumroad-field="description">
+      A private financial dashboard for small business owners. Import from QuickBooks or enter your numbers manually — Clarity Console by Mel translates what's really going on with your cash flow, profit, and runway into language you don't need an accounting degree to read.
+    </p>
+
+    <a href="#pricing" data-gumroad-field="price" class="inline-block bg-gold text-navy font-semibold px-8 py-4 rounded-xl hover:opacity-90 transition-opacity">
+      Get started — from $47/month
+    </a>
+
+    <p class="text-xs text-slate dark:text-cream/50 mt-4">
+      <span data-gumroad-field="rating">Be the first to review</span>
+      <span class="mx-1">·</span>
+      <span data-gumroad-field="review-count"></span>
+    </p>
+  </section>
+
+  <section class="border-y border-rule dark:border-white/10 bg-navy dark:bg-black/20">
+    <div class="max-w-5xl mx-auto px-6 py-16 grid sm:grid-cols-3 gap-10 text-cream">
+      <div>
+        <div class="flex gap-1 items-end h-10 mb-4" aria-hidden="true">
+          <div class="w-3 bg-gold rounded-sm" style="height:16px"></div>
+          <div class="w-3 bg-gold rounded-sm" style="height:28px"></div>
+          <div class="w-3 bg-gold rounded-sm" style="height:40px"></div>
+        </div>
+        <h3 class="font-serif text-lg mb-2">8 clarity tools</h3>
+        <p class="text-sm text-cream/70 leading-relaxed">From a 60-second cash truth check to a full 90-day forecast — each tool answers one specific question about your business.</p>
+      </div>
+      <div>
+        <div class="h-10 w-10 rounded-full border-2 border-gold flex items-center justify-center mb-4" aria-hidden="true">
+          <div class="h-2 w-2 bg-gold rounded-full"></div>
+        </div>
+        <h3 class="font-serif text-lg mb-2">Connect QuickBooks — or don't</h3>
+        <p class="text-sm text-cream/70 leading-relaxed">One-click secure sync with QuickBooks Online, or upload a CSV from any accounting software. Your call.</p>
+      </div>
+      <div>
+        <div class="h-10 w-10 mb-4" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="#c9a227" stroke-width="1.5" class="h-10 w-10"><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M8 8V6a4 4 0 0 1 8 0v2"/></svg>
+        </div>
+        <h3 class="font-serif text-lg mb-2">Private by default</h3>
+        <p class="text-sm text-cream/70 leading-relaxed">Your numbers are visible only to you. No shared dashboards, no data sold, nothing shown to anyone else.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="pricing" class="max-w-5xl mx-auto px-6 py-20">
+    <div class="text-center mb-14">
+      <p class="text-xs font-semibold tracking-[0.2em] text-gold uppercase mb-3">Pricing</p>
+      <h2 class="font-serif text-3xl sm:text-4xl font-medium">Choose how you get started</h2>
+    </div>
+
+    <div class="grid sm:grid-cols-2 gap-6">
+
+      <div class="rounded-2xl overflow-hidden border border-rule dark:border-white/10 bg-white dark:bg-white/5 flex flex-col">
+        <div class="px-6 py-5">
+          <p class="text-xs font-semibold tracking-[0.2em] text-gold uppercase mb-3">Monthly plan</p>
+          <p class="font-serif text-4xl font-semibold mb-1">$47<span class="text-base font-sans font-normal text-slate dark:text-cream/60">/mo</span></p>
+          <p class="text-sm text-slate dark:text-cream/60 mb-6">Cancel any time. All updates included.</p>
+          <a data-gumroad-action="buy" data-gumroad-option="Monthly" data-gumroad-recurrence="monthly"
+             class="block text-center bg-navy dark:bg-gold text-cream dark:text-navy font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity cursor-pointer">
+            Start monthly
+          </a>
+        </div>
+      </div>
+
+      <div class="rounded-2xl overflow-hidden border-2 border-sage bg-white dark:bg-white/5 flex flex-col relative">
+        <div class="bg-sage text-cream text-center text-xs font-semibold tracking-[0.15em] uppercase py-2">Most popular</div>
+        <div class="px-6 py-5">
+          <p class="text-xs font-semibold tracking-[0.2em] text-gold uppercase mb-3">Annual plan</p>
+          <p class="font-serif text-4xl font-semibold mb-1">$249<span class="text-base font-sans font-normal text-slate dark:text-cream/60">/yr</span></p>
+          <p class="text-sm text-slate dark:text-cream/60 mb-6">Save 56% vs. paying monthly.</p>
+          <a href="https://melservices2.gumroad.com/l/ashsd"
+             class="block text-center bg-sage text-cream font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity cursor-pointer">
+            Start annual plan
+          </a>
+        </div>
+      </div>
+
+      <div class="rounded-2xl overflow-hidden border border-rule dark:border-white/10 bg-white dark:bg-white/5 flex flex-col">
+        <div class="px-6 py-5">
+          <p class="text-xs font-semibold tracking-[0.2em] text-gold uppercase mb-3">Lifetime access</p>
+          <p class="font-serif text-4xl font-semibold mb-1">$497<span class="text-base font-sans font-normal text-slate dark:text-cream/60"> once</span></p>
+          <p class="text-sm text-slate dark:text-cream/60 mb-6">Pay once. No renewals, ever.</p>
+          <a href="https://melservices2.gumroad.com/l/afittj"
+             class="block text-center bg-navy dark:bg-gold text-cream dark:text-navy font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity cursor-pointer">
+            Get lifetime access
+          </a>
+        </div>
+      </div>
+
+      <div class="rounded-2xl overflow-hidden border-2 border-gold bg-white dark:bg-white/5 flex flex-col">
+        <div class="bg-gold text-navy text-center text-xs font-semibold tracking-[0.15em] uppercase py-2">Limited · first 50 only</div>
+        <div class="px-6 py-5">
+          <p class="text-xs font-semibold tracking-[0.2em] text-gold uppercase mb-3">Founding member</p>
+          <p class="font-serif text-4xl font-semibold mb-1">$297<span class="text-base font-sans font-normal text-slate dark:text-cream/60"> once</span></p>
+          <p class="text-sm text-slate dark:text-cream/60 mb-6">Lifetime access, founder pricing.</p>
+          <a href="https://melservices2.gumroad.com/l/yqmmzz"
+             class="block text-center bg-gold text-navy font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity cursor-pointer">
+            Become a founding member
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <section class="max-w-3xl mx-auto px-6 pb-24 text-center">
+    <p class="font-serif text-2xl leading-relaxed">
+      "You made $10,200 in revenue this month — but your cash is tight because $5,280 is still sitting in unpaid invoices."
+    </p>
+    <p class="text-sm text-slate dark:text-cream/60 mt-4">This is what Clarity Console by Mel sounds like — not a chart you have to interpret alone.</p>
+  </section>
+
+</main>
+
+<footer class="border-t border-rule dark:border-white/10">
+  <div class="max-w-5xl mx-auto px-6 py-8 text-center text-xs text-slate dark:text-cream/50">
+    © 2026 E-SERVICES BY MEL™ &nbsp;|&nbsp; Clarity Console by Mel™ &nbsp;|&nbsp; All rights reserved.
+  </div>
+</footer>
+
+<script>
+  (function () {
+    var pairs = [
+      { before: 'Accounts receivable aging: 47.2 days', after: "You're waiting an extra 2 weeks to get paid." },
+      { before: 'Net margin: -3.1% MoM \u0394', after: "You spent more than you made in, this month." },
+      { before: 'COGS / Revenue ratio: 0.61', after: "61 cents of every dollar goes straight to costs." },
+      { before: 'Cash runway: 2.4 months at current burn', after: "At this rate, you have about 10 weeks of cash left." }
+    ];
+    var i = 0;
+    var demo = document.getElementById('translate-demo');
+    var beforeEl = document.getElementById('translate-before');
+    var afterEl = document.getElementById('translate-after');
+    var prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    function next() {
+      i = (i + 1) % pairs.length;
+      demo.classList.remove('translate-in');
+      demo.classList.add('translate-out');
+      setTimeout(function () {
+        beforeEl.textContent = pairs[i].before;
+        afterEl.textContent = pairs[i].after;
+        demo.classList.remove('translate-out');
+        demo.classList.add('translate-in');
+      }, 600);
+    }
+
+    if (!prefersReduced) {
+      setInterval(next, 4200);
+    }
+  })();
+</script>
+
+</body>
+</html>
