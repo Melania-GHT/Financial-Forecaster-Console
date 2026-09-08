@@ -2,10 +2,6 @@
 // Core logic: takes historical periods of all 3 statements, computes trends,
 // projects forward, and generates a plain-English cross-statement narrative.
 
-/**
- * Linear regression: given an array of {x, y} points, returns {slope, intercept}.
- * Used to find the trend line through historical data for any line item.
- */
 function linearRegression(points) {
   const n = points.length;
   if (n < 2) return { slope: 0, intercept: points[0] ? points[0].y : 0 };
@@ -20,12 +16,6 @@ function linearRegression(points) {
   return { slope, intercept };
 }
 
-/**
- * Projects a single line item forward using its historical trend.
- * historicalValues: array of numbers, oldest first.
- * periodsAhead: how many future periods to project.
- * Returns array of projected values.
- */
 function projectLineItem(historicalValues, periodsAhead) {
   const points = historicalValues.map((y, x) => ({ x, y }));
   const { slope, intercept } = linearRegression(points);
@@ -38,10 +28,6 @@ function projectLineItem(historicalValues, periodsAhead) {
   return projections;
 }
 
-/**
- * Computes percent growth rate between the first and last historical value,
- * annualized-agnostic (just per-period average growth).
- */
 function averageGrowthRate(values) {
   if (values.length < 2) return 0;
   const growthRates = [];
@@ -54,17 +40,6 @@ function averageGrowthRate(values) {
   return growthRates.reduce((a, b) => a + b, 0) / growthRates.length;
 }
 
-/**
- * Main forecast function.
- * input: {
- *   periodType: 'monthly' | 'quarterly',
- *   periodsAhead: 3 | 6 | 12,
- *   incomeStatement: [{ revenue, cogs, opex }, ...],   // oldest first
- *   balanceSheet: [{ cash, otherAssets, totalLiabilities, equity }, ...],
- *   cashFlow: [{ operatingCash, investingCash, financingCash }, ...]
- * }
- * returns: { projections: {...}, narrative: string, flags: [...] }
- */
 function generateForecast(input) {
   const { periodType, periodsAhead, incomeStatement, balanceSheet, cashFlow } = input;
 
@@ -77,6 +52,8 @@ function generateForecast(input) {
   if (!cashFlow || cashFlow.length < 3) {
     throw new Error('At least 3 historical periods of Cash Flow Statement data are required for a reliable forecast.');
   }
+
+  const unit = periodType === 'monthly' ? 'month' : 'quarter';
 
   // --- INCOME STATEMENT PROJECTIONS ---
   const revenues = incomeStatement.map(p => p.revenue);
@@ -97,7 +74,6 @@ function generateForecast(input) {
   const cashValues = balanceSheet.map(p => p.cash);
   const otherAssetsValues = balanceSheet.map(p => p.otherAssets);
   const liabilitiesValues = balanceSheet.map(p => p.totalLiabilities);
-  const equityValues = balanceSheet.map(p => p.equity);
 
   const projectedOtherAssets = projectLineItem(otherAssetsValues, periodsAhead);
   const projectedLiabilities = projectLineItem(liabilitiesValues, periodsAhead);
@@ -114,7 +90,6 @@ function generateForecast(input) {
   const projectedInvestingCash = projectLineItem(investingCashValues, periodsAhead);
   const projectedFinancingCash = projectLineItem(financingCashValues, periodsAhead);
 
-  // Project actual cash balance forward: start from last known cash, add each period's net cash flow
   const lastCashBalance = cashValues[cashValues.length - 1];
   const projectedCashBalance = [];
   let runningCash = lastCashBalance;
@@ -162,6 +137,25 @@ function generateForecast(input) {
       type: 'expenses_outpacing_revenue',
       severity: 'warning',
       message: 'Your expenses have been growing significantly faster than your revenue. Even with sales increasing, this pattern erodes profitability over time.'
+    });
+  }
+
+  // --- NEW: revenue declining on its own, regardless of what cash is doing ---
+  if (revenueGrowthRate < -0.02) {
+    flags.push({
+      type: 'revenue_declining',
+      severity: revenueGrowthRate < -0.10 ? 'critical' : 'warning',
+      message: `Your revenue has been declining at an average of ${pct(Math.abs(revenueGrowthRate))} per ${unit}. Cash in the bank today doesn't mean this is sustainable — a shrinking top line will eventually catch up to your cash position too, even if it hasn't yet.`
+    });
+  }
+
+  // --- NEW: projected net profit turns negative during the forecast window ---
+  const firstNegativeProfitIndex = projectedNetProfit.findIndex(p => p < 0);
+  if (firstNegativeProfitIndex !== -1) {
+    flags.push({
+      type: 'profit_turns_negative',
+      severity: 'critical',
+      message: `Based on current trends, your business is projected to become unprofitable in ${unit} ${firstNegativeProfitIndex + 1} of this forecast. A healthy cash balance today can mask this until it's a real problem — this is worth addressing now.`
     });
   }
 
