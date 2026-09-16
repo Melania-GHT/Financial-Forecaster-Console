@@ -288,6 +288,7 @@ const TOOLS = [
   { id: "snapshot", label: "Profit Snapshot", group: "Find & Fix Leaks", n: 7 },
   { id: "forecast", label: "90-Day Forecaster", group: "Look Ahead", n: 8 },
   { id: "engine", label: "The Forecasting Engine", group: "Advanced", n: 9 },
+  { id: "margin", label: "Net Profit Margin", group: "Understand Your Numbers", n: 10 },
 ];
 const GROUPS = ["Start Here", "Understand Your Numbers", "Find & Fix Leaks", "Look Ahead", "Advanced"];
 
@@ -685,6 +686,7 @@ function renderTool(){
   if(activeTab==='snapshot') return renderSnapshot(c);
   if(activeTab==='forecast') return renderForecast(c);
   if(activeTab==='engine') return renderEngine(c);
+  if(activeTab==='margin') return renderMargin(c);
 }
 
 function topline(eyebrow, title, sub){
@@ -1453,6 +1455,47 @@ function renderEngineResults(d){
       </table>
     </div>
   `;
+}
+
+// TOOL 10: NET PROFIT MARGIN
+function renderMargin(c){
+  c.innerHTML = topline('Tool 10 · Instant','Net Profit Margin','Upload a financial CSV export and we\'ll calculate your net profit margin instantly — no manual entry.') + `
+    <div class="card">
+      <h3>Upload your CSV</h3>
+      <p class="card-sub">We'll automatically look for Revenue and Net Income (or Revenue and Expenses) columns — most standard accounting exports work as-is.</p>
+      <input type="file" id="marginFileInput" accept=".csv" style="margin-top:12px;" class="tool-input">
+      <div id="marginResult" style="margin-top:16px;"></div>
+    </div>
+  `;
+  document.getElementById('marginFileInput').addEventListener('change', handleMarginUpload);
+}
+
+async function handleMarginUpload(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  const resultBox = document.getElementById('marginResult');
+  resultBox.innerHTML = '<p class="card-sub">Calculating...</p>';
+
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    const res = await apiFetch('/api/calculate-margin', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if(!res.ok){
+      resultBox.innerHTML = `<div class="result"><span class="pill watch">Couldn't calculate</span><p class="story">${escapeHtml(data.error || 'Something went wrong reading that file.')}</p></div>`;
+      return;
+    }
+
+    resultBox.innerHTML = `<div class="result">
+      <span class="pill good">Calculated</span>
+      <div class="big">${data.net_profit_margin_percent}% Net Profit Margin</div>
+      <p class="story">Revenue: ${fmt(data.total_revenue)} · Net Profit: ${fmt(data.net_profit)} · ${data.rows_processed} row${data.rows_processed===1?'':'s'} processed.</p>
+    </div>`;
+  } catch(err){
+    resultBox.innerHTML = `<div class="result"><span class="pill watch">Couldn't calculate</span><p class="story">Could not reach the calculation engine. Please try again.</p></div>`;
+  }
 }
 
 // ---------- HELPERS ----------
