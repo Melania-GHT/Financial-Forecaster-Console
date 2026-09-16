@@ -6,6 +6,9 @@ const session = require('express-session');
 const { Pool } = require('pg');
 const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
+const { spawn } = require('child_process');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY || 'sk_test_placeholder', {
   apiVersion: '2026-06-24.dahlia',
 });
@@ -1070,41 +1073,12 @@ app.post('/api/qb/disconnect', requireActiveAccess, async (req, res) => {
   }
 });
 
-app.get('/*splat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
-
-app.listen(PORT, async () => {
-  console.log('Clarity Console by Mel running on port', PORT);
-  try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
-});
-/*
-  ADD-ON: Net Profit Margin route
-  ---------------------------------
-  Paste this into your existing server.js, alongside your other routes.
-
-  Requires two new npm packages — run this once in your project folder
-  (and commit the updated package.json / package-lock.json):
-
-      npm install multer
-
-  (child_process, path, and fs are built into Node — no install needed.)
-
-  This does NOT touch your existing login/session/database code —
-  it's a new, independent route that happens to live in the same file
-  and the same Render service.
-*/
-
-const multer = require('multer');
-const { spawn } = require('child_process');
-const path = require('path');
-const fs = require('fs');
+// ---------- NET PROFIT MARGIN (Python engine) ----------
 
 // Uploaded CSVs are written to a temp folder, read by Python, then deleted.
 const upload = multer({ dest: '/tmp/csv-uploads/' });
 
-// If you want this behind login like your other tools, add your existing
-// auth-checking middleware here (e.g. requireLogin) as a second argument
-// before upload.single('file') — ask if you're not sure how yours is named.
-app.post('/api/calculate-margin', upload.single('file'), (req, res) => {
+app.post('/api/calculate-margin', requireActiveAccess, upload.single('file'), (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
@@ -1144,4 +1118,11 @@ app.post('/api/calculate-margin', upload.single('file'), (req, res) => {
     fs.unlink(csvPath, () => {});
     return res.status(500).json({ error: 'Calculation engine is unavailable.' });
   });
+});
+
+app.get('/*splat', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+
+app.listen(PORT, async () => {
+  console.log('Clarity Console by Mel running on port', PORT);
+  try { await ensureTablesExist(); } catch (err) { console.error('DB setup error:', err); }
 });
