@@ -1,0 +1,50 @@
+<!--
+  ADD-ON: Net Profit Margin tool
+  --------------------------------
+  Paste this into public/index.html, matching your other tool tiles'
+  markup/CSS. No external URL to configure — this calls the SAME
+  Render service, so it works wherever the app is deployed.
+-->
+
+<div class="tool-card" id="netProfitMarginTool">
+  <h3>Net Profit Margin</h3>
+  <p>Upload a financial CSV export to calculate it instantly.</p>
+
+  <input type="file" id="npmFileInput" accept=".csv" />
+  <div id="npmResult" style="margin-top: 12px;"></div>
+</div>
+
+<script>
+  document.getElementById('npmFileInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const resultBox = document.getElementById('npmResult');
+    resultBox.innerHTML = 'Calculating...';
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      // Same origin — no full URL needed, this hits your Node server directly
+      const res = await fetch('/api/calculate-margin', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        resultBox.innerHTML = `<span style="color:#b3261e">${data.error}</span>`;
+        return;
+      }
+
+      resultBox.innerHTML = `
+        <div style="font-size:1.8rem;font-weight:bold;">${data.net_profit_margin_percent}%</div>
+        <div>Revenue: $${data.total_revenue.toLocaleString()}</div>
+        <div>Net Profit: $${data.net_profit.toLocaleString()}</div>
+      `;
+    } catch (err) {
+      resultBox.innerHTML = '<span style="color:#b3261e">Could not reach the calculation engine.</span>';
+    }
+  });
+</script>
